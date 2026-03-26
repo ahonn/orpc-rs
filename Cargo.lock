@@ -2460,7 +2460,7 @@ dependencies = [
 
 [[package]]
 name = "orpc"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-axum"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "bytes",
@@ -2492,7 +2492,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-procedure"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "erased-serde",
  "futures-core",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-specta"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "orpc",
  "orpc-procedure",
@@ -4039,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-orpc"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "futures-util",
  "orpc",
