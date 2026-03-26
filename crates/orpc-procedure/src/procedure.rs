@@ -46,9 +46,21 @@ impl<TCtx> ErasedProcedure<TCtx> {
         self
     }
 
+    /// Set the input schema from a boxed trait object.
+    pub fn with_input_schema_boxed(mut self, schema: Box<dyn ErasedSchema>) -> Self {
+        self.input_schema = Some(schema);
+        self
+    }
+
     /// Set the output schema.
     pub fn with_output_schema(mut self, schema: impl ErasedSchema) -> Self {
         self.output_schema = Some(Box::new(schema));
+        self
+    }
+
+    /// Set the output schema from a boxed trait object.
+    pub fn with_output_schema_boxed(mut self, schema: Box<dyn ErasedSchema>) -> Self {
+        self.output_schema = Some(schema);
         self
     }
 

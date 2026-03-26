@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use orpc_procedure::{ErasedSchema, ErrorMap, Meta, Route};
 
 use crate::error::ORPCError;
-use crate::schema::{Schema, SchemaAdapter};
+use crate::schema::Schema;
 
 /// Typed contract procedure. Carries `TInput`/`TOutput`/`TError` in generics
 /// for compile-time enforcement when implementing via `implement()`.
@@ -56,7 +56,7 @@ impl ContractBuilder {
             error_map: self.error_map,
             route: self.route,
             meta: self.meta,
-            output_schema: Box::new(SchemaAdapter(schema)),
+            output_schema: schema.into_erased(),
             _phantom: PhantomData,
         }
     }
@@ -67,7 +67,7 @@ impl ContractBuilder {
             error_map: self.error_map,
             route: self.route,
             meta: self.meta,
-            input_schema: Box::new(SchemaAdapter(schema)),
+            input_schema: schema.into_erased(),
             _phantom: PhantomData,
         }
     }
@@ -137,7 +137,7 @@ impl<TInput> ContractBuilderWithInput<TInput> {
             route: self.route,
             meta: self.meta,
             input_schema: self.input_schema,
-            output_schema: Box::new(SchemaAdapter(schema)),
+            output_schema: schema.into_erased(),
             _phantom: PhantomData,
         }
     }

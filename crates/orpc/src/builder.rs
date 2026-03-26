@@ -14,7 +14,7 @@ use crate::middleware::{
     ComposedChain, IdentityChain, MiddlewareChain, MiddlewareCtx, MiddlewareOutput, ProcedureMeta,
 };
 use crate::procedure::Procedure;
-use crate::schema::{make_input_validator, InputValidator, Schema, SchemaAdapter};
+use crate::schema::{make_input_validator, InputValidator, Schema};
 
 /// Create a new procedure builder with the given context type.
 ///
@@ -82,14 +82,15 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
     where
         S::Output: Serialize + 'static,
     {
-        let adapter = SchemaAdapter(schema);
-        let validator = make_input_validator(&adapter);
+        let is_passthrough = schema.is_passthrough();
+        let erased = schema.into_erased();
+        let validator = if is_passthrough { None } else { make_input_validator() };
         BuilderWithInput {
             middleware_chain: self.middleware_chain,
             error_map: self.error_map,
             route: self.route,
             meta: self.meta,
-            input_schema: Box::new(adapter),
+            input_schema: erased,
             input_validator: validator,
             _phantom: PhantomData,
         }
@@ -141,7 +142,7 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TError>
             meta: self.meta,
             input_schema: self.input_schema,
             input_validator: self.input_validator,
-            output_schema: Box::new(SchemaAdapter(schema)),
+            output_schema: schema.into_erased(),
             _phantom: PhantomData,
         }
     }

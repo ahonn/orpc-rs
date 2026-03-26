@@ -2,10 +2,13 @@
 ///
 /// This is the type-erased counterpart of the typed `Schema` trait in the `orpc` crate.
 /// Allows heterogeneous storage in `ErasedProcedure` while preserving schema information
-/// for OpenAPI generation.
+/// for OpenAPI generation and TypeScript type export.
 pub trait ErasedSchema: Send + Sync + 'static {
     /// Generate a JSON Schema representation.
     fn json_schema(&self) -> serde_json::Value;
+
+    /// Downcast support for extension crates (e.g., orpc-specta).
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// No-op schema placeholder for procedures without schema validation.
@@ -14,6 +17,10 @@ pub struct NoSchema;
 impl ErasedSchema for NoSchema {
     fn json_schema(&self) -> serde_json::Value {
         serde_json::Value::Null
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "examples/axum-react/server"]
+members = ["crates/*", "examples/axum-react/server", "examples/tauri-app/src-tauri"]
 
 [workspace.package]
 edition = "2024"
@@ -25,3 +25,7 @@ tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 bytes = "1"
 serde_urlencoded = "0.7"
+specta = { version = "=2.0.0-rc.23", features = ["derive"] }
+specta-typescript = "0.0.10"
+specta-serde = "0.0.10"
+tauri = { version = "2", default-features = false }

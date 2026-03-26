@@ -26,6 +26,15 @@ pub trait Schema: Send + Sync + 'static {
     fn is_passthrough(&self) -> bool {
         false
     }
+
+    /// Convert to type-erased schema. Override in extension crates (e.g., orpc-specta)
+    /// to preserve additional type information through erasure.
+    fn into_erased(self) -> Box<dyn ErasedSchema>
+    where
+        Self: Sized,
+    {
+        Box::new(SchemaAdapter(self))
+    }
 }
 
 /// No-validation pass-through schema. Counterpart to oRPC's `type<T>()`.
@@ -66,9 +75,13 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> Schema for Identit
 /// in `ErasedProcedure`.
 pub(crate) struct SchemaAdapter<S: Schema>(pub S);
 
-impl<S: Schema> ErasedSchema for SchemaAdapter<S> {
+impl<S: Schema + 'static> ErasedSchema for SchemaAdapter<S> {
     fn json_schema(&self) -> serde_json::Value {
         self.0.json_schema()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -77,20 +90,14 @@ impl<S: Schema> ErasedSchema for SchemaAdapter<S> {
 pub(crate) type InputValidator =
     Arc<dyn Fn(DynInput) -> Result<DynInput, ProcedureError> + Send + Sync>;
 
-/// Create a type-erased input validator from a Schema adapter.
-/// Returns `None` if the schema is passthrough (Identity).
-pub(crate) fn make_input_validator<S: Schema>(schema: &SchemaAdapter<S>) -> Option<InputValidator>
-where
-    S::Output: Serialize + 'static,
-{
-    if schema.0.is_passthrough() {
-        return None;
-    }
-    // For non-passthrough schemas: deserialize to Input, validate, serialize Output back.
-    // The SchemaAdapter owns the schema, but we need it in a closure. Use Arc.
-    // Since Schema: Send + Sync, this is safe.
-    None // TODO: requires schema to be Clone or Arc-wrapped; defer to when a real Schema impl exists.
-         // Identity (the only current impl) is passthrough, so this path is never taken.
+/// Create a type-erased input validator for non-passthrough schemas.
+///
+/// Currently returns `None` (validation deferred until a real non-passthrough Schema exists).
+/// Called only when `is_passthrough() == false`.
+pub(crate) fn make_input_validator() -> Option<InputValidator> {
+    // TODO: implement actual validation when a non-passthrough Schema impl exists.
+    // For now, all schemas (Identity, SpectaSchemaWrapper) are passthrough.
+    None
 }
 
 #[cfg(test)]
