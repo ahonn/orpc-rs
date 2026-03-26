@@ -338,10 +338,8 @@ mod tests {
 
     #[test]
     fn error_mapping_resolver_unknown() {
-        let proc_err = ProcedureError::Resolver(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "unknown",
-        )));
+        let proc_err =
+            ProcedureError::Resolver(Box::new(std::io::Error::other("unknown")));
         let result = procedure_error_to_orpc_error(proc_err);
         assert_eq!(result.code, ErrorCode::InternalServerError);
     }

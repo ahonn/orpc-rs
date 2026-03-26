@@ -1,5 +1,5 @@
 use axum::body::Body;
-use futures_util::StreamExt;
+
 use http::Request;
 use http_body_util::BodyExt;
 use orpc::*;
@@ -307,20 +307,6 @@ async fn response_content_type_is_json() {
 
 #[tokio::test]
 async fn sse_subscription_stream() {
-    let router: Router<AppCtx> = router! {
-        "counter" => os::<AppCtx>().handler(
-            |_ctx: AppCtx, _input: ()| async move {
-                let items = vec![
-                    Ok::<_, ORPCError>(1u32),
-                    Ok(2u32),
-                    Ok(3u32),
-                ];
-                // Return a multi-value stream by using ProcedureStream
-                Ok::<_, ORPCError>(items)
-            }
-        ),
-    };
-
     // For SSE, we need a handler that returns a stream.
     // The current builder's .handler() wraps in from_future (single-value).
     // To test SSE, we need a raw ErasedProcedure with from_stream.
