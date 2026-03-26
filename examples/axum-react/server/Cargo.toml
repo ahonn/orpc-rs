@@ -12,4 +12,6 @@ http = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+futures-util = { workspace = true }
+async-stream = "0.3"
 tower-http = { version = "0.6", features = ["cors"] }

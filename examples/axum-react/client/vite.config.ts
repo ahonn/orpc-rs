@@ -6,11 +6,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy RPC requests to the Rust server during development.
-      // This avoids CORS issues without the CorsLayer in dev mode.
-      "/api": {
+      // RPC protocol — used by @orpc/client RPCLink
+      "/rpc": {
         target: "http://localhost:3000",
-        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+      // OpenAPI protocol — REST-style endpoints
+      "/rest": {
+        target: "http://localhost:3000",
       },
     },
   },

@@ -12,6 +12,9 @@ orpc-server = { workspace = true }
 axum = { workspace = true }
 http = { workspace = true }
 bytes = { workspace = true }
+futures-core = { workspace = true }
+futures-util = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
@@ -19,4 +22,3 @@ tower = { workspace = true }
 http-body-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-futures-util = { workspace = true }

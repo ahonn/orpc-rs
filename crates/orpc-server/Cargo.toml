@@ -10,8 +10,10 @@ orpc = { workspace = true }
 orpc-procedure = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+futures-core = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
+serde_urlencoded = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }

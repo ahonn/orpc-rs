@@ -24,3 +24,4 @@ axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 bytes = "1"
+serde_urlencoded = "0.7"

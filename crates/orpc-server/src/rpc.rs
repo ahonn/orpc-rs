@@ -1,8 +1,13 @@
+use std::pin::Pin;
+
+use futures_core::Stream;
 use futures_util::StreamExt;
 use http::StatusCode;
 use orpc::ORPCError;
-use orpc_procedure::{DynInput, DynOutput, ErasedProcedure, ProcedureError, SerializeError};
+use orpc_procedure::{DynInput, DynOutput, ErasedProcedure, ProcedureError, ProcedureStream, SerializeError};
 use serde::{Deserialize, Serialize};
+
+use crate::sse;
 
 /// Wire format envelope for oRPC RPC protocol.
 ///
@@ -58,12 +63,14 @@ pub fn decode_rpc_request(body: &[u8]) -> Result<DynInput, ORPCError> {
     let wire: Wire = serde_json::from_slice(body)
         .map_err(|e| ORPCError::bad_request(format!("Invalid request body: {e}")))?;
 
-    // `{}` (no json field) means undefined/no input → treat as null
-    let _ = wire.meta; // meta is ignored for Phase 2a
-    match wire.json {
-        Some(value) => Ok(DynInput::from_value(value)),
-        None => Ok(DynInput::from_value(serde_json::Value::Null)),
+    let mut value = wire.json.unwrap_or(serde_json::Value::Null);
+
+    if !wire.meta.is_empty() {
+        let entries = crate::meta::parse_meta(&wire.meta)?;
+        crate::meta::apply_meta(&mut value, &entries)?;
     }
+
+    Ok(DynInput::from_value(value))
 }
 
 /// Encode a successful `DynOutput` as an RPC response.
@@ -133,6 +140,65 @@ pub async fn execute_rpc<TCtx>(
     input: DynInput,
 ) -> (StatusCode, Vec<u8>) {
     let mut stream = procedure.exec(ctx, input);
+    match stream.next().await {
+        Some(Ok(output)) => match encode_rpc_success(output) {
+            Ok(result) => result,
+            Err(err) => {
+                let orpc_err = procedure_error_to_orpc_error(err);
+                encode_rpc_error(&orpc_err)
+            }
+        },
+        Some(Err(err)) => {
+            let orpc_err = procedure_error_to_orpc_error(err);
+            encode_rpc_error(&orpc_err)
+        }
+        None => {
+            let err = ORPCError::internal_server_error("Procedure returned no output");
+            encode_rpc_error(&err)
+        }
+    }
+}
+
+/// Response from [`execute_rpc_auto`]: either a single JSON body or an SSE stream.
+pub enum RpcResponse {
+    /// Single-value response (query/mutation).
+    Json {
+        status: StatusCode,
+        body: Vec<u8>,
+    },
+    /// Streaming response (subscription).
+    Sse {
+        body_stream: Pin<Box<dyn Stream<Item = Result<String, std::io::Error>> + Send>>,
+    },
+}
+
+/// Execute a procedure, auto-detecting single-value vs subscription.
+///
+/// - Single-value (`from_future`): awaits result, returns `RpcResponse::Json`
+/// - Subscription (`from_stream`): returns `RpcResponse::Sse` immediately
+///
+/// `last_event_id` supports SSE reconnection: events start from `last_event_id + 1`.
+pub async fn execute_rpc_auto<TCtx>(
+    procedure: &ErasedProcedure<TCtx>,
+    ctx: TCtx,
+    input: DynInput,
+    last_event_id: Option<u64>,
+) -> RpcResponse {
+    let stream = procedure.exec(ctx, input);
+
+    if sse::is_subscription(&stream) {
+        let start_id = last_event_id.map(|id| id + 1).unwrap_or(0);
+        RpcResponse::Sse {
+            body_stream: Box::pin(sse::stream_to_sse(stream, start_id)),
+        }
+    } else {
+        let (status, body) = consume_single_value(stream).await;
+        RpcResponse::Json { status, body }
+    }
+}
+
+/// Consume the first item from a ProcedureStream and encode as JSON.
+async fn consume_single_value(mut stream: ProcedureStream) -> (StatusCode, Vec<u8>) {
     match stream.next().await {
         Some(Ok(output)) => match encode_rpc_success(output) {
             Ok(result) => result,

@@ -21,17 +21,16 @@ export interface CreatePlanetInput {
   has_rings: boolean;
 }
 
-// --- oRPC client setup ---
+// --- oRPC client setup (RPC protocol) ---
 
-// In development, Vite proxies /api → http://localhost:3000.
-// In production, point directly to the Rust server.
-// RPCLink requires an absolute URL, so we prepend the current origin.
+// RPCLink requires an absolute URL.
+// Vite proxies /rpc → http://localhost:3000/rpc in development.
 const link = new RPCLink({
-  url: () => `${window.location.origin}/api`,
+  url: () => `${window.location.origin}/rpc`,
 });
 
 // The untyped client — procedure paths are built dynamically via Proxy.
-// client.planet.find(input) → POST /api/planet/find {"json": input, "meta": []}
+// client.planet.find(input) → POST /rpc/planet/find {"json": input}
 export const client: any = createORPCClient(link);
 
 // TanStack Query integration — generates queryOptions / mutationOptions.
