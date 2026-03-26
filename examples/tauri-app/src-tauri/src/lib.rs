@@ -21,16 +21,59 @@ struct PlanetDb {
 impl PlanetDb {
     fn new() -> Self {
         let planets = vec![
-            Planet { id: 1, name: "Mercury".into(), radius_km: 2440, has_rings: false },
-            Planet { id: 2, name: "Venus".into(), radius_km: 6052, has_rings: false },
-            Planet { id: 3, name: "Earth".into(), radius_km: 6371, has_rings: false },
-            Planet { id: 4, name: "Mars".into(), radius_km: 3390, has_rings: false },
-            Planet { id: 5, name: "Jupiter".into(), radius_km: 69911, has_rings: true },
-            Planet { id: 6, name: "Saturn".into(), radius_km: 58232, has_rings: true },
-            Planet { id: 7, name: "Uranus".into(), radius_km: 25362, has_rings: true },
-            Planet { id: 8, name: "Neptune".into(), radius_km: 24622, has_rings: true },
+            Planet {
+                id: 1,
+                name: "Mercury".into(),
+                radius_km: 2440,
+                has_rings: false,
+            },
+            Planet {
+                id: 2,
+                name: "Venus".into(),
+                radius_km: 6052,
+                has_rings: false,
+            },
+            Planet {
+                id: 3,
+                name: "Earth".into(),
+                radius_km: 6371,
+                has_rings: false,
+            },
+            Planet {
+                id: 4,
+                name: "Mars".into(),
+                radius_km: 3390,
+                has_rings: false,
+            },
+            Planet {
+                id: 5,
+                name: "Jupiter".into(),
+                radius_km: 69911,
+                has_rings: true,
+            },
+            Planet {
+                id: 6,
+                name: "Saturn".into(),
+                radius_km: 58232,
+                has_rings: true,
+            },
+            Planet {
+                id: 7,
+                name: "Uranus".into(),
+                radius_km: 25362,
+                has_rings: true,
+            },
+            Planet {
+                id: 8,
+                name: "Neptune".into(),
+                radius_km: 24622,
+                has_rings: true,
+            },
         ];
-        PlanetDb { next_id: 9, planets }
+        PlanetDb {
+            next_id: 9,
+            planets,
+        }
     }
 }
 
@@ -115,14 +158,20 @@ fn build_router() -> Router<AppCtx> {
     );
 
     let mut r = router! {
-        "ping" => os::<AppCtx>().handler(ping),
+        "ping" => os::<AppCtx>()
+            .output(specta::<String>())
+            .handler(ping),
         "planet" => {
-            "list" => os::<AppCtx>().handler(list_planets),
+            "list" => os::<AppCtx>()
+                .output(specta::<Vec<Planet>>())
+                .handler(list_planets),
             "find" => os::<AppCtx>()
                 .input(specta::<FindPlanetInput>())
+                .output(specta::<Planet>())
                 .handler(find_planet),
             "create" => os::<AppCtx>()
                 .input(specta::<CreatePlanetInput>())
+                .output(specta::<Planet>())
                 .handler(create_planet),
         },
     };
@@ -141,8 +190,8 @@ pub fn run() {
     // Export TypeScript bindings at startup (dev only).
     #[cfg(debug_assertions)]
     {
-        let bindings_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../src/bindings.ts");
+        let bindings_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/bindings.ts");
         if let Err(e) = orpc_specta::export_ts(&router, bindings_path.to_str().unwrap()) {
             eprintln!("Failed to export TS bindings: {e}");
         } else {

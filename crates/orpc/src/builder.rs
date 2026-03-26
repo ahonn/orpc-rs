@@ -4,8 +4,8 @@ use std::sync::Arc;
 use orpc_procedure::{
     DynInput, DynOutput, ErasedSchema, ErrorMap, Meta, ProcedureError, ProcedureStream, Route,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::context::Context;
 use crate::error::ORPCError;
@@ -14,7 +14,7 @@ use crate::middleware::{
     ComposedChain, IdentityChain, MiddlewareChain, MiddlewareCtx, MiddlewareOutput, ProcedureMeta,
 };
 use crate::procedure::Procedure;
-use crate::schema::{make_input_validator, InputValidator, Schema};
+use crate::schema::{InputValidator, Schema, make_input_validator};
 
 /// Create a new procedure builder with the given context type.
 ///
@@ -77,6 +77,24 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
         self
     }
 
+    /// Set the output schema without input schema.
+    pub fn output<S: Schema>(
+        self,
+        schema: S,
+    ) -> BuilderWithOutput<TBaseCtx, TCtx, S::Output, TError>
+    where
+        S::Output: Serialize + 'static,
+    {
+        BuilderWithOutput {
+            middleware_chain: self.middleware_chain,
+            error_map: self.error_map,
+            route: self.route,
+            meta: self.meta,
+            output_schema: schema.into_erased(),
+            _phantom: PhantomData,
+        }
+    }
+
     /// Set the input schema, transitioning to `BuilderWithInput`.
     pub fn input<S: Schema>(self, schema: S) -> BuilderWithInput<TBaseCtx, TCtx, S::Output, TError>
     where
@@ -84,7 +102,11 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
     {
         let is_passthrough = schema.is_passthrough();
         let erased = schema.into_erased();
-        let validator = if is_passthrough { None } else { make_input_validator() };
+        let validator = if is_passthrough {
+            None
+        } else {
+            make_input_validator()
+        };
         BuilderWithInput {
             middleware_chain: self.middleware_chain,
             error_map: self.error_map,
@@ -204,6 +226,39 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TOutput, TError>
     }
 }
 
+/// Builder after `.output(schema)` has been called (no input schema).
+pub struct BuilderWithOutput<TBaseCtx, TCtx, TOutput, TError = ORPCError> {
+    middleware_chain: Arc<dyn MiddlewareChain<TBaseCtx, TCtx>>,
+    error_map: ErrorMap,
+    route: Route,
+    meta: Meta,
+    output_schema: Box<dyn ErasedSchema>,
+    _phantom: PhantomData<fn(TOutput, TError)>,
+}
+
+impl<TBaseCtx: Context, TCtx: Context, TOutput, TError>
+    BuilderWithOutput<TBaseCtx, TCtx, TOutput, TError>
+{
+    /// Set handler (with output schema, no input schema — handler receives `()`).
+    pub fn handler<F>(self, f: F) -> Procedure<TBaseCtx, (), TOutput, TError>
+    where
+        F: Handler<TCtx, (), TOutput, TError>,
+        TOutput: Serialize + Send + 'static,
+        TError: Into<ProcedureError> + Send + 'static,
+    {
+        build_procedure(
+            self.middleware_chain,
+            f,
+            None,
+            None,
+            Some(self.output_schema),
+            self.error_map,
+            self.route,
+            self.meta,
+        )
+    }
+}
+
 /// Build the exec closure that composes middleware chain + handler.
 ///
 /// This is the critical function that bakes `TInput`/`TOutput`/`TError` into
@@ -304,7 +359,10 @@ mod tests {
         let input = DynInput::from_value(serde_json::json!({"name": "World"}));
         let mut stream = erased.exec((), input);
         let result = stream.next().await.unwrap().unwrap();
-        assert_eq!(result.to_value().unwrap(), serde_json::json!("Hello, World!"));
+        assert_eq!(
+            result.to_value().unwrap(),
+            serde_json::json!("Hello, World!")
+        );
     }
 
     #[tokio::test]
@@ -372,16 +430,17 @@ mod tests {
         let input = DynInput::from_value(serde_json::json!({"name": "Test"}));
         let mut stream = erased.exec((), input);
         let result = stream.next().await.unwrap().unwrap();
-        assert_eq!(result.to_value().unwrap(), serde_json::json!("Hello, Test!"));
+        assert_eq!(
+            result.to_value().unwrap(),
+            serde_json::json!("Hello, Test!")
+        );
     }
 
     #[tokio::test]
     async fn multiple_calls_to_same_procedure() {
-        let proc = os::<u32>()
-            .input(Identity::<String>::new())
-            .handler(|ctx: u32, input: String| async move {
-                Ok::<_, ORPCError>(format!("{ctx}:{input}"))
-            });
+        let proc = os::<u32>().input(Identity::<String>::new()).handler(
+            |ctx: u32, input: String| async move { Ok::<_, ORPCError>(format!("{ctx}:{input}")) },
+        );
 
         let erased = proc.into_erased();
 

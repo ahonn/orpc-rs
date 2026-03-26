@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 
 use orpc::Schema;
 use orpc_procedure::ErasedSchema;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use specta::datatype::DataType;
 use specta::{Type, TypeCollection};
 
