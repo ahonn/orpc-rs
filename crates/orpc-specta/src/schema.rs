@@ -65,7 +65,10 @@ where
 
     fn into_erased(self) -> Box<dyn ErasedSchema> {
         let mut types = TypeCollection::default();
-        let data_type = T::definition(&mut types);
+        // T::reference() returns a Reference wrapping the DataType, and for
+        // NamedType implementations it also registers the type in the collection.
+        let reference = T::reference(&mut types, &[]);
+        let data_type = reference.inner;
         Box::new(SpectaSchema { data_type, types })
     }
 }
@@ -122,7 +125,7 @@ mod tests {
         let wrapper = specta::<TestStruct>();
         let erased: Box<dyn ErasedSchema> = wrapper.into_erased();
         let schema = erased.as_any().downcast_ref::<SpectaSchema>().unwrap();
-        assert!(!schema.types.is_empty());
+        assert!((&schema.types).into_iter().count() > 0);
     }
 
     #[test]
