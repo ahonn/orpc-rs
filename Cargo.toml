@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "examples/axum-react/server"]
 
 [workspace.package]
 edition = "2024"
@@ -17,3 +17,10 @@ pin-project-lite = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 futures-util = "0.3"
 orpc-procedure = { path = "crates/orpc-procedure" }
+orpc = { path = "crates/orpc" }
+orpc-server = { path = "crates/orpc-server" }
+http = "1"
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+bytes = "1"

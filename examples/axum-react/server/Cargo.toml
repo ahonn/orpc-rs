@@ -1,0 +1,15 @@
+[package]
+name = "example-axum-react"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+orpc = { workspace = true }
+orpc-axum = { path = "../../../crates/orpc-axum" }
+axum = { workspace = true }
+http = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tower-http = { version = "0.6", features = ["cors"] }
