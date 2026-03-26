@@ -15,9 +15,11 @@ bytes = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+pin-project-lite = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 tower = { workspace = true }
 http-body-util = { workspace = true }
 serde = { workspace = true }

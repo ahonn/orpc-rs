@@ -1,40 +1,21 @@
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { TauriLink } from "@orpc-rs/tauri";
 
-interface RpcResponse {
-  status: number;
-  body: { json?: unknown };
-}
+const link = TauriLink();
 
-interface SubscriptionEvent {
-  event: "message" | "done" | "error";
-  id?: number;
-  data?: { json?: unknown; code?: string; message?: string };
-}
-
+/**
+ * Call an oRPC procedure via Tauri IPC.
+ * Uses TauriLink from @orpc-rs/tauri under the hood.
+ */
 export async function rpcCall<T>(path: string, input?: unknown): Promise<T> {
-  const request = {
-    path,
-    input: input !== undefined ? { json: input } : {},
-  };
-
-  const response = await invoke<RpcResponse>("plugin:orpc|handle_rpc_call", {
-    request,
-  });
-
-  if (response.status >= 400) {
-    const err = response.body?.json as Record<string, unknown> | undefined;
-    throw new Error(
-      (err?.message as string) ?? `RPC error (${response.status})`,
-    );
-  }
-
-  return response.body?.json as T;
+  return link.call(path.split("."), input) as Promise<T>;
 }
 
 /**
- * Subscribe to a streaming procedure via Tauri Channel.
+ * Subscribe to a streaming procedure via Tauri IPC.
  *
- * Returns an unsubscribe function.
+ * Internally uses TauriLink which returns an AsyncIterableIterator
+ * for subscription procedures. This wrapper provides a callback API
+ * for compatibility with React components.
  */
 export function rpcSubscribe<T>(
   path: string,
@@ -45,27 +26,19 @@ export function rpcSubscribe<T>(
   },
   input?: unknown,
 ): void {
-  const request = {
-    path,
-    input: input !== undefined ? { json: input } : {},
-  };
-
-  const channel = new Channel<SubscriptionEvent>();
-  channel.onmessage = (event) => {
-    switch (event.event) {
-      case "message":
-        callbacks.onMessage(event.data?.json as T, event.id ?? 0);
-        break;
-      case "done":
-        callbacks.onDone?.();
-        break;
-      case "error":
-        callbacks.onError?.(event.data);
-        break;
+  (async () => {
+    try {
+      const iter = (await link.call(
+        path.split("."),
+        input,
+      )) as AsyncIterableIterator<T>;
+      let id = 0;
+      for await (const item of iter) {
+        callbacks.onMessage(item, id++);
+      }
+      callbacks.onDone?.();
+    } catch (err) {
+      callbacks.onError?.(err);
     }
-  };
-
-  invoke("plugin:orpc|handle_rpc_subscription", { request, channel }).catch(
-    (err) => callbacks.onError?.(err),
-  );
+  })();
 }

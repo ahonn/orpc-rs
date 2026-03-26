@@ -1,4 +1,7 @@
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
 use axum::{
     Router as AxumRouter,
@@ -6,11 +9,13 @@ use axum::{
     extract::Request,
     response::Response,
 };
+use futures_core::Stream;
 use futures_util::StreamExt;
 use http::StatusCode;
 use orpc::Router;
 use orpc_server::openapi::{self, RouteIndex};
 use orpc_server::rpc::{self, RpcResponse};
+use tokio::time::{Interval, interval};
 
 /// Configuration for the oRPC axum integration.
 pub struct ORPCConfig {
@@ -218,11 +223,13 @@ fn json_response(status: StatusCode, body: Vec<u8>) -> Response {
         .unwrap()
 }
 
+/// Default SSE keep-alive interval (5 seconds), matching oRPC TypeScript server.
+const SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+
 fn sse_response(
-    stream: std::pin::Pin<
-        Box<dyn futures_core::Stream<Item = Result<String, std::io::Error>> + Send>,
-    >,
+    stream: Pin<Box<dyn Stream<Item = Result<String, std::io::Error>> + Send>>,
 ) -> Response {
+    let stream = SseKeepAlive::new(stream, SSE_KEEPALIVE_INTERVAL);
     let body = Body::from_stream(stream.map(|r| r.map(bytes::Bytes::from)));
     Response::builder()
         .status(StatusCode::OK)
@@ -230,6 +237,65 @@ fn sse_response(
         .header("cache-control", "no-cache")
         .body(body)
         .unwrap()
+}
+
+pin_project_lite::pin_project! {
+    // Wraps an SSE stream with periodic keep-alive comments.
+    // Emits `: \n\n` when no data has been sent within the interval,
+    // preventing proxies and browsers from closing idle connections.
+    struct SseKeepAlive<S> {
+        #[pin]
+        inner: S,
+        keepalive: Interval,
+        done: bool,
+    }
+}
+
+impl<S> SseKeepAlive<S>
+where
+    S: Stream<Item = Result<String, std::io::Error>>,
+{
+    fn new(inner: S, keepalive_interval: Duration) -> Self {
+        SseKeepAlive {
+            inner,
+            keepalive: interval(keepalive_interval),
+            done: false,
+        }
+    }
+}
+
+impl<S> Stream for SseKeepAlive<S>
+where
+    S: Stream<Item = Result<String, std::io::Error>>,
+{
+    type Item = Result<String, std::io::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+
+        if *this.done {
+            return Poll::Ready(None);
+        }
+
+        // Data has priority over keep-alive
+        match this.inner.poll_next(cx) {
+            Poll::Ready(Some(item)) => {
+                this.keepalive.reset();
+                Poll::Ready(Some(item))
+            }
+            Poll::Ready(None) => {
+                *this.done = true;
+                Poll::Ready(None)
+            }
+            Poll::Pending => {
+                // No data ready — check if keep-alive timer has fired
+                match this.keepalive.poll_tick(cx) {
+                    Poll::Ready(_) => Poll::Ready(Some(Ok(": \n\n".to_string()))),
+                    Poll::Pending => Poll::Pending,
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,4 +436,48 @@ where
     let ctx = ctx_fn(&parts);
     let (status, body) = openapi::execute_openapi(procedure, ctx, input).await;
     json_response(status, body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn sse_keepalive_emits_comment_on_idle() {
+        let inner = futures_util::stream::pending::<Result<String, std::io::Error>>();
+        let stream = SseKeepAlive::new(inner, Duration::from_secs(5));
+        tokio::pin!(stream);
+
+        // With paused time, the runtime auto-advances to the next timer.
+        // inner is Pending, so the keepalive fires at 5s.
+        let item = stream.next().await.unwrap().unwrap();
+        assert_eq!(item, ": \n\n");
+
+        // Second keepalive fires at 10s
+        let item = stream.next().await.unwrap().unwrap();
+        assert_eq!(item, ": \n\n");
+    }
+
+    #[tokio::test]
+    async fn sse_keepalive_passes_data_through() {
+        let items: Vec<Result<String, std::io::Error>> = vec![
+            Ok("event: message\ndata: 1\n\n".into()),
+            Ok("event: done\ndata:\n\n".into()),
+        ];
+        let inner = futures_util::stream::iter(items);
+        let stream = SseKeepAlive::new(inner, Duration::from_secs(5));
+        let results: Vec<String> = stream.map(|r| r.unwrap()).collect().await;
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].contains("data: 1"));
+        assert!(results[1].contains("event: done"));
+    }
+
+    #[tokio::test]
+    async fn sse_keepalive_terminates_with_inner() {
+        let inner = futures_util::stream::empty::<Result<String, std::io::Error>>();
+        let stream = SseKeepAlive::new(inner, Duration::from_secs(5));
+        let results: Vec<_> = stream.collect().await;
+        assert!(results.is_empty());
+    }
 }

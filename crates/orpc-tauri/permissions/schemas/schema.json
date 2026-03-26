@@ -331,10 +331,10 @@
           "markdownDescription": "Denies the handle_rpc_subscription command without any pre-configured scope."
         },
         {
-          "description": "Allows invoking oRPC handlers via IPC\n#### This default permission set includes:\n\n- `allow-handle-rpc-call`\n- `allow-handle-rpc-subscription`",
+          "description": "Allows invoking oRPC handlers via IPC\n#### This default permission set includes:\n\n- `allow-handle-rpc`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows invoking oRPC handlers via IPC\n#### This default permission set includes:\n\n- `allow-handle-rpc-call`\n- `allow-handle-rpc-subscription`"
+          "markdownDescription": "Allows invoking oRPC handlers via IPC\n#### This default permission set includes:\n\n- `allow-handle-rpc`"
         }
       ]
     }

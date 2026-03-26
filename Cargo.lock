@@ -2483,6 +2483,7 @@ dependencies = [
  "orpc",
  "orpc-procedure",
  "orpc-server",
+ "pin-project-lite",
  "serde",
  "serde_json",
  "tokio",
@@ -4046,6 +4047,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
+ "tokio",
 ]
 
 [[package]]

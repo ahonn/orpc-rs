@@ -1,4 +1,4 @@
-const COMMANDS: &[&str] = &["handle_rpc_call", "handle_rpc_subscription"];
+const COMMANDS: &[&str] = &["handle_rpc"];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)

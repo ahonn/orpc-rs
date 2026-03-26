@@ -4,8 +4,7 @@ Allows invoking oRPC handlers via IPC
 
 #### This default permission set includes the following:
 
-- `allow-handle-rpc-call`
-- `allow-handle-rpc-subscription`
+- `allow-handle-rpc`
 
 ## Permission Table
 
