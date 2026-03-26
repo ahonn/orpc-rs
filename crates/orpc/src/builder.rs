@@ -77,6 +77,21 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
         self
     }
 
+    /// Set the output schema without input schema.
+    pub fn output<S: Schema>(self, schema: S) -> BuilderWithOutput<TBaseCtx, TCtx, S::Output, TError>
+    where
+        S::Output: Serialize + 'static,
+    {
+        BuilderWithOutput {
+            middleware_chain: self.middleware_chain,
+            error_map: self.error_map,
+            route: self.route,
+            meta: self.meta,
+            output_schema: schema.into_erased(),
+            _phantom: PhantomData,
+        }
+    }
+
     /// Set the input schema, transitioning to `BuilderWithInput`.
     pub fn input<S: Schema>(self, schema: S) -> BuilderWithInput<TBaseCtx, TCtx, S::Output, TError>
     where
@@ -196,6 +211,39 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TOutput, TError>
             f,
             Some(self.input_schema),
             self.input_validator,
+            Some(self.output_schema),
+            self.error_map,
+            self.route,
+            self.meta,
+        )
+    }
+}
+
+/// Builder after `.output(schema)` has been called (no input schema).
+pub struct BuilderWithOutput<TBaseCtx, TCtx, TOutput, TError = ORPCError> {
+    middleware_chain: Arc<dyn MiddlewareChain<TBaseCtx, TCtx>>,
+    error_map: ErrorMap,
+    route: Route,
+    meta: Meta,
+    output_schema: Box<dyn ErasedSchema>,
+    _phantom: PhantomData<fn(TOutput, TError)>,
+}
+
+impl<TBaseCtx: Context, TCtx: Context, TOutput, TError>
+    BuilderWithOutput<TBaseCtx, TCtx, TOutput, TError>
+{
+    /// Set handler (with output schema, no input schema — handler receives `()`).
+    pub fn handler<F>(self, f: F) -> Procedure<TBaseCtx, (), TOutput, TError>
+    where
+        F: Handler<TCtx, (), TOutput, TError>,
+        TOutput: Serialize + Send + 'static,
+        TError: Into<ProcedureError> + Send + 'static,
+    {
+        build_procedure(
+            self.middleware_chain,
+            f,
+            None,
+            None,
             Some(self.output_schema),
             self.error_map,
             self.route,

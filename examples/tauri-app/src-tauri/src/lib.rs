@@ -115,14 +115,20 @@ fn build_router() -> Router<AppCtx> {
     );
 
     let mut r = router! {
-        "ping" => os::<AppCtx>().handler(ping),
+        "ping" => os::<AppCtx>()
+            .output(specta::<String>())
+            .handler(ping),
         "planet" => {
-            "list" => os::<AppCtx>().handler(list_planets),
+            "list" => os::<AppCtx>()
+                .output(specta::<Vec<Planet>>())
+                .handler(list_planets),
             "find" => os::<AppCtx>()
                 .input(specta::<FindPlanetInput>())
+                .output(specta::<Planet>())
                 .handler(find_planet),
             "create" => os::<AppCtx>()
                 .input(specta::<CreatePlanetInput>())
+                .output(specta::<Planet>())
                 .handler(create_planet),
         },
     };

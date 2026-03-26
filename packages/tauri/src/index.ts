@@ -48,7 +48,7 @@ export function TauriLink(options?: TauriLinkOptions) {
     call: async (
       path: readonly string[],
       input: unknown,
-      _options?: unknown,
+      _options?: { signal?: AbortSignal; context?: Record<string, unknown> },
     ): Promise<unknown> => {
       const request = {
         path: path.join("."),
@@ -107,7 +107,7 @@ function channelToAsyncIterator<T>(
     }
   }
 
-  channel.onmessage = (event) => {
+  channel.onmessage = (event: SubscriptionEvent) => {
     switch (event.event) {
       case "message":
         push({ type: "value", value: event.data?.json as T });
