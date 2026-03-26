@@ -2460,7 +2460,7 @@ dependencies = [
 
 [[package]]
 name = "orpc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-axum"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "bytes",
@@ -2483,6 +2483,7 @@ dependencies = [
  "orpc",
  "orpc-procedure",
  "orpc-server",
+ "pin-project-lite",
  "serde",
  "serde_json",
  "tokio",
@@ -2491,7 +2492,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-procedure"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "erased-serde",
  "futures-core",
@@ -2505,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -2520,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "orpc-specta"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "orpc",
  "orpc-procedure",
@@ -4036,7 +4037,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-orpc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures-util",
  "orpc",
@@ -4046,6 +4047,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
+ "tokio",
 ]
 
 [[package]]

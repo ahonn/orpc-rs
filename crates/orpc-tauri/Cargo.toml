@@ -1,6 +1,7 @@
 [package]
 name = "tauri-plugin-orpc"
-version = "0.1.0"
+description = "Tauri v2 IPC plugin for orpc-rs"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -14,6 +15,7 @@ tauri = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 futures-util = { workspace = true }
+tokio = { workspace = true }
 
 [build-dependencies]
 tauri-plugin = { version = "2", features = ["build"] }
