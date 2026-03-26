@@ -2,16 +2,24 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
-/// A no-op hasher optimized for `TypeId` keys.
+/// A passthrough hasher optimized for `TypeId` keys.
 ///
 /// `TypeId` values are already well-distributed hashes, so re-hashing
-/// them is wasted work. This hasher simply passes through the `u64`.
+/// them is wasted work. This hasher passes through the `u64` value.
+///
+/// Handles both `write_u64` (current TypeId impl) and `write` (future-proof fallback).
 #[derive(Default)]
-struct NoOpHasher(u64);
+struct IdHasher(u64);
 
-impl Hasher for NoOpHasher {
-    fn write(&mut self, _bytes: &[u8]) {
-        unimplemented!("NoOpHasher only supports u64 (TypeId)")
+impl Hasher for IdHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        // Fallback: fold bytes into a u64. This handles the case where
+        // TypeId changes its Hasher::write behavior.
+        let mut value = 0u64;
+        for (i, &b) in bytes.iter().enumerate() {
+            value ^= (b as u64) << ((i % 8) * 8);
+        }
+        self.0 = value;
     }
 
     fn write_u64(&mut self, i: u64) {
@@ -23,7 +31,7 @@ impl Hasher for NoOpHasher {
     }
 }
 
-type TypeMap = HashMap<TypeId, Box<dyn Any + Send + Sync>, BuildHasherDefault<NoOpHasher>>;
+type TypeMap = HashMap<TypeId, Box<dyn Any + Send + Sync>, BuildHasherDefault<IdHasher>>;
 
 /// Type-safe heterogeneous state container.
 ///

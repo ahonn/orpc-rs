@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
-use orpc_procedure::ErasedSchema;
+use orpc_procedure::{DynInput, ErasedSchema, ProcedureError};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -18,6 +19,13 @@ pub trait Schema: Send + Sync + 'static {
 
     /// Generate JSON Schema representation (for OpenAPI generation).
     fn json_schema(&self) -> serde_json::Value;
+
+    /// Whether this schema is a passthrough (Input == Output, validate is identity).
+    /// When true, the framework skips the validate() call and deserializes directly
+    /// into the Output type, avoiding a serialize/deserialize roundtrip.
+    fn is_passthrough(&self) -> bool {
+        false
+    }
 }
 
 /// No-validation pass-through schema. Counterpart to oRPC's `type<T>()`.
@@ -48,6 +56,10 @@ impl<T: DeserializeOwned + Serialize + Send + Sync + 'static> Schema for Identit
     fn json_schema(&self) -> serde_json::Value {
         serde_json::json!({})
     }
+
+    fn is_passthrough(&self) -> bool {
+        true
+    }
 }
 
 /// Adapter: wraps a typed `Schema` into a type-erased `ErasedSchema` for storage
@@ -58,6 +70,27 @@ impl<S: Schema> ErasedSchema for SchemaAdapter<S> {
     fn json_schema(&self) -> serde_json::Value {
         self.0.json_schema()
     }
+}
+
+/// Type-erased input validator. Calls `Schema::validate` at runtime.
+/// `None` for passthrough schemas (Identity), avoiding serialize/deserialize roundtrip.
+pub(crate) type InputValidator =
+    Arc<dyn Fn(DynInput) -> Result<DynInput, ProcedureError> + Send + Sync>;
+
+/// Create a type-erased input validator from a Schema adapter.
+/// Returns `None` if the schema is passthrough (Identity).
+pub(crate) fn make_input_validator<S: Schema>(schema: &SchemaAdapter<S>) -> Option<InputValidator>
+where
+    S::Output: Serialize + 'static,
+{
+    if schema.0.is_passthrough() {
+        return None;
+    }
+    // For non-passthrough schemas: deserialize to Input, validate, serialize Output back.
+    // The SchemaAdapter owns the schema, but we need it in a closure. Use Arc.
+    // Since Schema: Send + Sync, this is safe.
+    None // TODO: requires schema to be Clone or Arc-wrapped; defer to when a real Schema impl exists.
+         // Identity (the only current impl) is passthrough, so this path is never taken.
 }
 
 #[cfg(test)]

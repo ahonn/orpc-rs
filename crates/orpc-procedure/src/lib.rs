@@ -11,7 +11,7 @@ pub use error::{DeserializeError, ProcedureError, SerializeError};
 pub use input::DynInput;
 pub use output::DynOutput;
 pub use procedure::ErasedProcedure;
-pub use route::{ErrorMap, Meta, Route};
+pub use route::{ErrorMap, HttpMethod, Meta, Route};
 pub use schema::{ErasedSchema, NoSchema};
 pub use state::State;
 pub use stream::ProcedureStream;

@@ -78,9 +78,9 @@ impl From<ORPCError> for ProcedureError {
 
 /// Error code enum, wire-compatible with oRPC TS.
 ///
-/// Serializes as `SCREAMING_SNAKE_CASE` strings: `"BAD_REQUEST"`, `"NOT_FOUND"`, etc.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+/// All variants serialize as plain strings: `"BAD_REQUEST"`, `"NOT_FOUND"`, `"USER_BANNED"`.
+/// `Custom(String)` serializes as the raw string value directly.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
     BadRequest,
     Unauthorized,
@@ -100,6 +100,65 @@ pub enum ErrorCode {
     GatewayTimeout,
     /// User-defined error code. Serializes as the raw string value.
     Custom(String),
+}
+
+impl ErrorCode {
+    fn as_str(&self) -> &str {
+        match self {
+            ErrorCode::BadRequest => "BAD_REQUEST",
+            ErrorCode::Unauthorized => "UNAUTHORIZED",
+            ErrorCode::Forbidden => "FORBIDDEN",
+            ErrorCode::NotFound => "NOT_FOUND",
+            ErrorCode::MethodNotAllowed => "METHOD_NOT_ALLOWED",
+            ErrorCode::Timeout => "TIMEOUT",
+            ErrorCode::Conflict => "CONFLICT",
+            ErrorCode::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
+            ErrorCode::UnprocessableContent => "UNPROCESSABLE_CONTENT",
+            ErrorCode::TooManyRequests => "TOO_MANY_REQUESTS",
+            ErrorCode::ClientClosedRequest => "CLIENT_CLOSED_REQUEST",
+            ErrorCode::InternalServerError => "INTERNAL_SERVER_ERROR",
+            ErrorCode::NotImplemented => "NOT_IMPLEMENTED",
+            ErrorCode::BadGateway => "BAD_GATEWAY",
+            ErrorCode::ServiceUnavailable => "SERVICE_UNAVAILABLE",
+            ErrorCode::GatewayTimeout => "GATEWAY_TIMEOUT",
+            ErrorCode::Custom(code) => code.as_str(),
+        }
+    }
+
+    fn from_str(s: &str) -> Self {
+        match s {
+            "BAD_REQUEST" => ErrorCode::BadRequest,
+            "UNAUTHORIZED" => ErrorCode::Unauthorized,
+            "FORBIDDEN" => ErrorCode::Forbidden,
+            "NOT_FOUND" => ErrorCode::NotFound,
+            "METHOD_NOT_ALLOWED" => ErrorCode::MethodNotAllowed,
+            "TIMEOUT" => ErrorCode::Timeout,
+            "CONFLICT" => ErrorCode::Conflict,
+            "PAYLOAD_TOO_LARGE" => ErrorCode::PayloadTooLarge,
+            "UNPROCESSABLE_CONTENT" => ErrorCode::UnprocessableContent,
+            "TOO_MANY_REQUESTS" => ErrorCode::TooManyRequests,
+            "CLIENT_CLOSED_REQUEST" => ErrorCode::ClientClosedRequest,
+            "INTERNAL_SERVER_ERROR" => ErrorCode::InternalServerError,
+            "NOT_IMPLEMENTED" => ErrorCode::NotImplemented,
+            "BAD_GATEWAY" => ErrorCode::BadGateway,
+            "SERVICE_UNAVAILABLE" => ErrorCode::ServiceUnavailable,
+            "GATEWAY_TIMEOUT" => ErrorCode::GatewayTimeout,
+            other => ErrorCode::Custom(other.to_string()),
+        }
+    }
+}
+
+impl Serialize for ErrorCode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ErrorCode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(ErrorCode::from_str(&s))
+    }
 }
 
 impl ErrorCode {
@@ -129,13 +188,7 @@ impl ErrorCode {
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorCode::Custom(code) => write!(f, "{code}"),
-            other => {
-                let json = serde_json::to_value(other).unwrap_or_default();
-                write!(f, "{}", json.as_str().unwrap_or("UNKNOWN"))
-            }
-        }
+        f.write_str(self.as_str())
     }
 }
 

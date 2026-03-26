@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -5,6 +6,35 @@ use orpc_procedure::{DynInput, DynOutput, ProcedureError, Route};
 use serde::Serialize;
 
 use crate::handler::BoxFuture;
+
+/// Wrap an async fn as middleware, eliminating `Box::pin(...) as BoxFuture<...>` boilerplate.
+///
+/// Before:
+/// ```ignore
+/// let auth = |ctx: AppCtx, mw: MiddlewareCtx<AuthCtx>| {
+///     Box::pin(async move { mw.next(AuthCtx { ... }).await })
+///         as BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
+/// };
+/// ```
+///
+/// After:
+/// ```ignore
+/// let auth = middleware_fn(|ctx: AppCtx, mw: MiddlewareCtx<AuthCtx>| async move {
+///     mw.next(AuthCtx { ... }).await
+/// });
+/// ```
+pub fn middleware_fn<TCtx, TNextCtx, F, Fut>(
+    f: F,
+) -> impl Fn(TCtx, MiddlewareCtx<TNextCtx>) -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
+       + Send
+       + Sync
+       + 'static
+where
+    F: Fn(TCtx, MiddlewareCtx<TNextCtx>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<MiddlewareOutput, ProcedureError>> + Send + 'static,
+{
+    move |ctx, mw| Box::pin(f(ctx, mw))
+}
 
 /// Type alias for the inner handler passed through the middleware chain.
 type InnerHandler<TCtx> =
@@ -23,12 +53,14 @@ pub(crate) trait MiddlewareChain<TBaseCtx, TCurrentCtx>: Send + Sync + 'static {
     ///
     /// - `ctx`: The base context (entry point).
     /// - `input`: Type-erased input.
+    /// - `meta`: Procedure metadata (route info, accessible to middleware).
     /// - `inner_handler`: The next step after all middleware (typically deserialization + user handler).
     ///   Consumed once per invocation (FnOnce).
     fn run(
         &self,
         ctx: TBaseCtx,
         input: DynInput,
+        meta: ProcedureMeta,
         inner_handler: InnerHandler<TCurrentCtx>,
     ) -> BoxFuture<'static, Result<DynOutput, ProcedureError>>;
 }
@@ -46,10 +78,8 @@ impl<TCtx: Send + 'static> MiddlewareChain<TCtx, TCtx> for IdentityChain {
         &self,
         ctx: TCtx,
         input: DynInput,
-        inner_handler: Box<
-            dyn FnOnce(TCtx, DynInput) -> BoxFuture<'static, Result<DynOutput, ProcedureError>>
-                + Send,
-        >,
+        _meta: ProcedureMeta,
+        inner_handler: InnerHandler<TCtx>,
     ) -> BoxFuture<'static, Result<DynOutput, ProcedureError>> {
         inner_handler(ctx, input)
     }
@@ -100,22 +130,23 @@ where
         &self,
         ctx: TBaseCtx,
         input: DynInput,
+        meta: ProcedureMeta,
         inner_handler: InnerHandler<TCurrentCtx>,
     ) -> BoxFuture<'static, Result<DynOutput, ProcedureError>> {
         let middleware = self.middleware.clone();
+        let meta_for_mw = meta.clone();
 
         // Run the previous chain (TBaseCtx → TMidCtx), then invoke our middleware.
         // The inner handler for `prev` creates a MiddlewareCtx and calls our middleware.
         self.prev.run(
             ctx,
             input,
+            meta,
             Box::new(move |mid_ctx: TMidCtx, input: DynInput| {
                 let mw_ctx = MiddlewareCtx {
                     next_fn: inner_handler,
                     dyn_input: input,
-                    meta: ProcedureMeta {
-                        route: Route::default(),
-                    },
+                    meta: meta_for_mw,
                 };
                 Box::pin(async move {
                     let result = middleware(mid_ctx, mw_ctx).await?;
@@ -174,8 +205,18 @@ impl<TNextCtx> MiddlewareCtx<TNextCtx> {
 
     /// Inspect the type-erased input (only if already materialized as Value).
     /// Returns `None` if the input is a raw Deserializer.
+    /// Call `materialize_input()` first to convert Deserializer to Value.
     pub fn input(&self) -> Option<&serde_json::Value> {
         self.dyn_input.as_value()
+    }
+
+    /// Materialize the input: convert `Deserializer` variant to `Value` variant.
+    /// After this call, `input()` will return `Some`. No-op if already materialized.
+    pub fn materialize_input(&mut self) -> Result<(), ProcedureError> {
+        // Take ownership temporarily, materialize, put back
+        let input = std::mem::replace(&mut self.dyn_input, DynInput::from_value(serde_json::Value::Null));
+        self.dyn_input = input.materialize()?;
+        Ok(())
     }
 
     /// Access procedure metadata.
@@ -190,6 +231,7 @@ pub struct MiddlewareOutput {
 }
 
 /// Procedure metadata accessible to middleware.
+#[derive(Clone)]
 pub struct ProcedureMeta {
     pub route: Route,
 }
@@ -198,6 +240,12 @@ pub struct ProcedureMeta {
 mod tests {
     use super::*;
     use orpc_procedure::DynInput;
+
+    fn test_meta() -> ProcedureMeta {
+        ProcedureMeta {
+            route: Route::get("/test"),
+        }
+    }
 
     #[tokio::test]
     async fn identity_chain_passthrough() {
@@ -208,6 +256,7 @@ mod tests {
             .run(
                 "context",
                 input,
+                test_meta(),
                 Box::new(|ctx: &str, input: DynInput| {
                     Box::pin(async move {
                         let val: i32 = input.deserialize()?;
@@ -240,6 +289,7 @@ mod tests {
             .run(
                 42u32,
                 input,
+                test_meta(),
                 Box::new(|ctx: String, input: DynInput| {
                     Box::pin(async move {
                         let val: String = input.deserialize()?;
@@ -273,6 +323,7 @@ mod tests {
             .run(
                 (),
                 input,
+                test_meta(),
                 Box::new(|_ctx: (), _input: DynInput| {
                     Box::pin(async move { panic!("should not be called") })
                 }),
@@ -313,6 +364,7 @@ mod tests {
             .run(
                 42u32,
                 input,
+                test_meta(),
                 Box::new(|ctx: (String, bool), input: DynInput| {
                     Box::pin(async move {
                         let val: String = input.deserialize()?;

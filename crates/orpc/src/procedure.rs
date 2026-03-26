@@ -25,28 +25,17 @@ pub struct Procedure<TBaseCtx, TInput, TOutput, TError> {
     pub(crate) _phantom: PhantomData<fn(TInput, TOutput, TError)>,
 }
 
-/// Zero-cost conversion: erase `TInput`/`TOutput`/`TError`, keep `TBaseCtx`.
-///
-/// The `exec` closure already has type info baked in (deserialization + serialization
-/// happen inside), so this is just a field move.
+/// Conversion to `ErasedProcedure`. Delegates to `into_erased()`, preserving all metadata.
 impl<TBaseCtx, TInput, TOutput, TError> From<Procedure<TBaseCtx, TInput, TOutput, TError>>
     for ErasedProcedure<TBaseCtx>
 where
     TBaseCtx: Send + Sync + 'static,
 {
     fn from(proc: Procedure<TBaseCtx, TInput, TOutput, TError>) -> Self {
-        ErasedProcedure::new(
-            move |ctx, input| (proc.exec)(ctx, input),
-            proc.route,
-            proc.meta,
-        )
-        // Transfer schemas and error_map
-        .with_error_map(proc.error_map)
-        // Schemas need conditional transfer
+        proc.into_erased()
     }
 }
 
-// A more direct conversion that preserves schemas
 impl<TBaseCtx, TInput, TOutput, TError> Procedure<TBaseCtx, TInput, TOutput, TError>
 where
     TBaseCtx: Send + Sync + 'static,

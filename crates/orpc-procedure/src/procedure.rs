@@ -159,7 +159,7 @@ mod tests {
             Meta::default(),
         );
 
-        assert_eq!(proc.route.method.as_deref(), Some("GET"));
+        assert_eq!(proc.route.method, Some(crate::route::HttpMethod::Get));
         assert_eq!(proc.route.path.as_deref(), Some("/users"));
         assert_eq!(proc.route.tags, vec!["users"]);
         assert_eq!(proc.route.summary.as_deref(), Some("List users"));

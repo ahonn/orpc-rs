@@ -16,18 +16,50 @@ impl<TCtx> Router<TCtx> {
         }
     }
 
-    /// Add a procedure. The value can be a `Procedure` (auto-converts via `Into<ErasedProcedure>`).
+    /// Add a procedure. Accepts `Procedure` (auto-erased) or `ErasedProcedure`.
+    /// Panics if the key already exists.
     pub fn procedure(mut self, key: impl Into<String>, proc: impl Into<ErasedProcedure<TCtx>>) -> Self {
-        self.procedures.insert(key.into(), proc.into());
+        let key = key.into();
+        if self.procedures.contains_key(&key) {
+            panic!("duplicate procedure key: \"{key}\"");
+        }
+        self.procedures.insert(key, proc.into());
         self
     }
 
     /// Nest a sub-router under a prefix. Keys become `prefix.key`.
+    /// Panics if any nested key collides with an existing key.
     pub fn nest(mut self, prefix: &str, router: Router<TCtx>) -> Self {
         for (key, proc) in router.procedures {
-            self.procedures.insert(format!("{prefix}.{key}"), proc);
+            let full_key = format!("{prefix}.{key}");
+            if self.procedures.contains_key(&full_key) {
+                panic!("duplicate procedure key: \"{full_key}\"");
+            }
+            self.procedures.insert(full_key, proc);
         }
         self
+    }
+
+    /// Insert a procedure (mutation style, used by `router!` macro).
+    #[doc(hidden)]
+    pub fn _insert(&mut self, key: impl Into<String>, proc: impl Into<ErasedProcedure<TCtx>>) {
+        let key = key.into();
+        if self.procedures.contains_key(&key) {
+            panic!("duplicate procedure key: \"{key}\"");
+        }
+        self.procedures.insert(key, proc.into());
+    }
+
+    /// Insert a nested sub-router (mutation style, used by `router!` macro).
+    #[doc(hidden)]
+    pub fn _insert_nest(&mut self, prefix: &str, router: Router<TCtx>) {
+        for (key, proc) in router.procedures {
+            let full_key = format!("{prefix}.{key}");
+            if self.procedures.contains_key(&full_key) {
+                panic!("duplicate procedure key: \"{full_key}\"");
+            }
+            self.procedures.insert(full_key, proc);
+        }
     }
 
     /// Look up a procedure by key.
@@ -57,28 +89,45 @@ impl<TCtx> Default for Router<TCtx> {
     }
 }
 
-/// Declarative macro for building routers.
+/// Declarative macro for building routers with optional nesting.
 ///
 /// ```ignore
 /// let router = router! {
-///     "ping" : ping_procedure,
-///     "pong" : pong_procedure,
+///     "ping" => ping_procedure,
+///     "planet" => {
+///         "list" => list_procedure,
+///         "find" => find_procedure,
+///     },
 /// };
-/// ```
-///
-/// For nested routing, use the `.nest()` method:
-/// ```ignore
-/// let planet_router = router! { "list" : list, "find" : find };
-/// let router = router! { "ping" : ping }.nest("planet", planet_router);
+/// // Keys: "ping", "planet.list", "planet.find"
 /// ```
 #[macro_export]
 macro_rules! router {
-    ($($key:literal : $proc:expr),* $(,)?) => {{
-        $crate::Router::new()
-        $(
-            .procedure($key, $proc)
-        )*
+    ($($tt:tt)*) => {{
+        #[allow(unused_mut)]
+        let mut __r = $crate::Router::new();
+        $crate::__router_items!(__r, $($tt)*);
+        __r
     }};
+}
+
+/// Internal helper macro for `router!`. Not part of the public API.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __router_items {
+    // Nested: "key" => { ... }, rest
+    ($r:ident, $key:literal => { $($inner:tt)* } $(, $($rest:tt)*)?) => {
+        $r._insert_nest($key, $crate::router!($($inner)*));
+        $($crate::__router_items!($r, $($rest)*);)?
+    };
+    // Flat: "key" => expr, rest
+    ($r:ident, $key:literal => $proc:expr $(, $($rest:tt)*)?) => {
+        $r._insert($key, $proc);
+        $($crate::__router_items!($r, $($rest)*);)?
+    };
+    // Base cases
+    ($r:ident,) => {};
+    ($r:ident) => {};
 }
 
 #[cfg(test)]
@@ -125,21 +174,51 @@ mod tests {
     #[test]
     fn router_macro_simple() {
         let r: Router<()> = router! {
-            "ping" : dummy_procedure(),
-            "pong" : dummy_procedure(),
+            "ping" => dummy_procedure(),
+            "pong" => dummy_procedure(),
         };
         assert_eq!(r.len(), 2);
     }
 
     #[test]
-    fn router_macro_with_nest() {
+    fn router_macro_with_manual_nest() {
         let inner: Router<()> = router! {
-            "list" : dummy_procedure(),
-            "find" : dummy_procedure(),
+            "list" => dummy_procedure(),
+            "find" => dummy_procedure(),
         };
-        let r = router! { "ping" : dummy_procedure() }.nest("planet", inner);
+        let r = router! { "ping" => dummy_procedure() }.nest("planet", inner);
         assert_eq!(r.len(), 3);
         assert!(r.get("planet.list").is_some());
+    }
+
+    #[test]
+    fn router_macro_nested_block() {
+        let r: Router<()> = router! {
+            "ping" => dummy_procedure(),
+            "planet" => {
+                "list" => dummy_procedure(),
+                "find" => dummy_procedure(),
+            },
+        };
+        assert_eq!(r.len(), 3);
+        assert!(r.get("ping").is_some());
+        assert!(r.get("planet.list").is_some());
+        assert!(r.get("planet.find").is_some());
+    }
+
+    #[test]
+    fn router_macro_deep_nested() {
+        let r: Router<()> = router! {
+            "api" => {
+                "v1" => {
+                    "users" => dummy_procedure(),
+                },
+                "health" => dummy_procedure(),
+            },
+        };
+        assert_eq!(r.len(), 2);
+        assert!(r.get("api.v1.users").is_some());
+        assert!(r.get("api.health").is_some());
     }
 
     #[test]

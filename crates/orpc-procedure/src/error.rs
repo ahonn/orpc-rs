@@ -119,10 +119,7 @@ mod tests {
 
     #[test]
     fn serialize_error_display() {
-        let err = SerializeError(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "write failed",
-        )));
+        let err = SerializeError(Box::new(std::io::Error::other("write failed")));
         assert_eq!(err.to_string(), "write failed");
     }
 
@@ -139,8 +136,7 @@ mod tests {
 
     #[test]
     fn procedure_error_serialize_variant() {
-        let err = ProcedureError::Serialize(SerializeError(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        let err = ProcedureError::Serialize(SerializeError(Box::new(std::io::Error::other(
             "encode failed",
         ))));
         assert!(err.to_string().contains("serialization error"));

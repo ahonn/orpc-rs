@@ -1,10 +1,35 @@
+/// HTTP method for route matching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+    Head,
+    Options,
+}
+
+impl std::fmt::Display for HttpMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
+            HttpMethod::Put => "PUT",
+            HttpMethod::Delete => "DELETE",
+            HttpMethod::Patch => "PATCH",
+            HttpMethod::Head => "HEAD",
+            HttpMethod::Options => "OPTIONS",
+        })
+    }
+}
+
 /// HTTP route metadata for a procedure.
 ///
 /// Carries method, path, tags, and OpenAPI documentation fields.
-/// Lives in `orpc-procedure` for now; may move to `orpc-contract` in Phase 1c.
 #[derive(Debug, Clone, Default)]
 pub struct Route {
-    pub method: Option<String>,
+    pub method: Option<HttpMethod>,
     pub path: Option<String>,
     pub tags: Vec<String>,
     pub summary: Option<String>,
@@ -19,7 +44,7 @@ impl Route {
 
     pub fn get(path: impl Into<String>) -> Self {
         Route {
-            method: Some("GET".into()),
+            method: Some(HttpMethod::Get),
             path: Some(path.into()),
             ..Default::default()
         }
@@ -27,7 +52,7 @@ impl Route {
 
     pub fn post(path: impl Into<String>) -> Self {
         Route {
-            method: Some("POST".into()),
+            method: Some(HttpMethod::Post),
             path: Some(path.into()),
             ..Default::default()
         }
@@ -35,7 +60,7 @@ impl Route {
 
     pub fn put(path: impl Into<String>) -> Self {
         Route {
-            method: Some("PUT".into()),
+            method: Some(HttpMethod::Put),
             path: Some(path.into()),
             ..Default::default()
         }
@@ -43,7 +68,15 @@ impl Route {
 
     pub fn delete(path: impl Into<String>) -> Self {
         Route {
-            method: Some("DELETE".into()),
+            method: Some(HttpMethod::Delete),
+            path: Some(path.into()),
+            ..Default::default()
+        }
+    }
+
+    pub fn patch(path: impl Into<String>) -> Self {
+        Route {
+            method: Some(HttpMethod::Patch),
             path: Some(path.into()),
             ..Default::default()
         }
@@ -100,7 +133,7 @@ mod tests {
             .description("Returns all users")
             .deprecated();
 
-        assert_eq!(route.method.as_deref(), Some("GET"));
+        assert_eq!(route.method, Some(HttpMethod::Get));
         assert_eq!(route.path.as_deref(), Some("/users"));
         assert_eq!(route.tags, vec!["users", "admin"]);
         assert_eq!(route.summary.as_deref(), Some("List users"));
@@ -111,7 +144,7 @@ mod tests {
     #[test]
     fn route_post() {
         let route = Route::post("/users");
-        assert_eq!(route.method.as_deref(), Some("POST"));
+        assert_eq!(route.method, Some(HttpMethod::Post));
         assert_eq!(route.path.as_deref(), Some("/users"));
     }
 

@@ -14,7 +14,7 @@ use crate::middleware::{
     ComposedChain, IdentityChain, MiddlewareChain, MiddlewareCtx, MiddlewareOutput, ProcedureMeta,
 };
 use crate::procedure::Procedure;
-use crate::schema::{Schema, SchemaAdapter};
+use crate::schema::{make_input_validator, InputValidator, Schema, SchemaAdapter};
 
 /// Create a new procedure builder with the given context type.
 ///
@@ -78,13 +78,19 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
     }
 
     /// Set the input schema, transitioning to `BuilderWithInput`.
-    pub fn input<S: Schema>(self, schema: S) -> BuilderWithInput<TBaseCtx, TCtx, S::Output, TError> {
+    pub fn input<S: Schema>(self, schema: S) -> BuilderWithInput<TBaseCtx, TCtx, S::Output, TError>
+    where
+        S::Output: Serialize + 'static,
+    {
+        let adapter = SchemaAdapter(schema);
+        let validator = make_input_validator(&adapter);
         BuilderWithInput {
             middleware_chain: self.middleware_chain,
             error_map: self.error_map,
             route: self.route,
             meta: self.meta,
-            input_schema: Box::new(SchemaAdapter(schema)),
+            input_schema: Box::new(adapter),
+            input_validator: validator,
             _phantom: PhantomData,
         }
     }
@@ -101,6 +107,7 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
             f,
             None,
             None,
+            None,
             self.error_map,
             self.route,
             self.meta,
@@ -115,6 +122,7 @@ pub struct BuilderWithInput<TBaseCtx, TCtx, TInput, TError = ORPCError> {
     route: Route,
     meta: Meta,
     input_schema: Box<dyn ErasedSchema>,
+    input_validator: Option<InputValidator>,
     _phantom: PhantomData<fn(TInput, TError)>,
 }
 
@@ -132,6 +140,7 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TError>
             route: self.route,
             meta: self.meta,
             input_schema: self.input_schema,
+            input_validator: self.input_validator,
             output_schema: Box::new(SchemaAdapter(schema)),
             _phantom: PhantomData,
         }
@@ -149,6 +158,7 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TError>
             self.middleware_chain,
             f,
             Some(self.input_schema),
+            self.input_validator,
             None,
             self.error_map,
             self.route,
@@ -164,6 +174,7 @@ pub struct BuilderWithIO<TBaseCtx, TCtx, TInput, TOutput, TError = ORPCError> {
     route: Route,
     meta: Meta,
     input_schema: Box<dyn ErasedSchema>,
+    input_validator: Option<InputValidator>,
     output_schema: Box<dyn ErasedSchema>,
     _phantom: PhantomData<fn(TInput, TOutput, TError)>,
 }
@@ -183,6 +194,7 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TOutput, TError>
             self.middleware_chain,
             f,
             Some(self.input_schema),
+            self.input_validator,
             Some(self.output_schema),
             self.error_map,
             self.route,
@@ -191,14 +203,18 @@ impl<TBaseCtx: Context, TCtx: Context, TInput, TOutput, TError>
     }
 }
 
-/// Internal: build the exec closure that composes middleware chain + handler.
+/// Build the exec closure that composes middleware chain + handler.
 ///
 /// This is the critical function that bakes `TInput`/`TOutput`/`TError` into
 /// the type-erased `exec: Arc<dyn Fn(TBaseCtx, DynInput) -> ProcedureStream>`.
-fn build_procedure<TBaseCtx, TCtx, TInput, TOutput, TError, F>(
+///
+/// Used by both `Builder::handler()` and `ContractImplementer::handler()`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_procedure<TBaseCtx, TCtx, TInput, TOutput, TError, F>(
     middleware_chain: Arc<dyn MiddlewareChain<TBaseCtx, TCtx>>,
     handler: F,
     input_schema: Option<Box<dyn ErasedSchema>>,
+    input_validator: Option<InputValidator>,
     output_schema: Option<Box<dyn ErasedSchema>>,
     error_map: ErrorMap,
     route: Route,
@@ -218,7 +234,8 @@ where
     let exec = Arc::new(move |base_ctx: TBaseCtx, dyn_input: DynInput| {
         let handler = handler.clone();
         let chain = middleware_chain.clone();
-        let _procedure_meta = ProcedureMeta {
+        let input_validator = input_validator.clone();
+        let procedure_meta = ProcedureMeta {
             route: route_for_meta.clone(),
         };
 
@@ -227,8 +244,14 @@ where
                 .run(
                     base_ctx,
                     dyn_input,
+                    procedure_meta,
                     Box::new(move |ctx: TCtx, input: DynInput| -> BoxFuture<'static, Result<DynOutput, ProcedureError>> {
                         Box::pin(async move {
+                            // Apply input validation if a non-passthrough schema is present
+                            let input = match input_validator {
+                                Some(ref validator) => validator(input)?,
+                                None => input,
+                            };
                             let typed_input: TInput = input.deserialize()?;
                             let result = handler
                                 .call(ctx, typed_input)
