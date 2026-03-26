@@ -3,6 +3,7 @@ resolver = "2"
 members = ["crates/*", "examples/axum-react/server", "examples/tauri-app/src-tauri"]
 
 [workspace.package]
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ahonn/orpc-rs"
