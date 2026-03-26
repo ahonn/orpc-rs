@@ -5,7 +5,7 @@ use futures_core::Stream;
 use orpc::ORPCError;
 use orpc_procedure::{DynOutput, ProcedureError, ProcedureStream};
 
-use crate::rpc::{encode_rpc_error, procedure_error_to_orpc_error, RpcEnvelope};
+use crate::rpc::{RpcEnvelope, encode_rpc_error, procedure_error_to_orpc_error};
 
 /// Check if a `ProcedureStream` is a subscription (multi-value).
 ///
@@ -59,10 +59,7 @@ fn encode_sse_error_data(err: &ORPCError) -> String {
 /// - `event: message` with sequential ids for each `Ok(DynOutput)`
 /// - `event: error` for `Err(ProcedureError)` (then terminates)
 /// - `event: done` when the stream completes naturally
-pub fn stream_to_sse(
-    stream: ProcedureStream,
-    start_id: u64,
-) -> SseStream {
+pub fn stream_to_sse(stream: ProcedureStream, start_id: u64) -> SseStream {
     SseStream {
         inner: stream,
         next_id: start_id,
@@ -142,12 +139,15 @@ unsafe impl Send for SseStream {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::{stream, StreamExt};
+    use futures_util::{StreamExt, stream};
 
     #[test]
     fn format_message_event() {
         let event = format_sse_event("message", Some(0), r#"{"json":"hello"}"#);
-        assert_eq!(event, "event: message\nid: 0\ndata: {\"json\":\"hello\"}\n\n");
+        assert_eq!(
+            event,
+            "event: message\nid: 0\ndata: {\"json\":\"hello\"}\n\n"
+        );
     }
 
     #[test]
@@ -159,7 +159,10 @@ mod tests {
     #[test]
     fn format_error_event() {
         let event = format_sse_event("error", None, r#"{"json":{"code":"ERR"}}"#);
-        assert_eq!(event, "event: error\ndata: {\"json\":{\"code\":\"ERR\"}}\n\n");
+        assert_eq!(
+            event,
+            "event: error\ndata: {\"json\":{\"code\":\"ERR\"}}\n\n"
+        );
     }
 
     #[test]
@@ -176,9 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn sse_stream_single_item() {
-        let inner = ProcedureStream::from_stream(stream::iter(vec![
-            Ok(DynOutput::new("hello")),
-        ]));
+        let inner = ProcedureStream::from_stream(stream::iter(vec![Ok(DynOutput::new("hello"))]));
         let mut sse = stream_to_sse(inner, 0);
 
         // First chunk is the initial flush comment
@@ -217,9 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn sse_stream_with_start_id() {
-        let inner = ProcedureStream::from_stream(stream::iter(vec![
-            Ok(DynOutput::new("a")),
-        ]));
+        let inner = ProcedureStream::from_stream(stream::iter(vec![Ok(DynOutput::new("a"))]));
         let mut sse = stream_to_sse(inner, 5);
 
         let _ = sse.next().await; // flush comment

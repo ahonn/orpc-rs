@@ -29,7 +29,10 @@ struct Planet {
 // --- Handlers ---
 
 async fn greet(ctx: AuthCtx, input: GreetInput) -> Result<String, ORPCError> {
-    Ok(format!("Hello {}, from {} via {}!", input.name, ctx.user, ctx.db))
+    Ok(format!(
+        "Hello {}, from {} via {}!",
+        input.name, ctx.user, ctx.db
+    ))
 }
 
 async fn find_planet(_ctx: AppCtx, input: String) -> Result<Planet, ORPCError> {
@@ -153,13 +156,14 @@ async fn router_nested() {
 /// Middleware short-circuit via output()
 #[tokio::test]
 async fn middleware_short_circuit() {
-    let cache_mw = middleware_fn(|_ctx: (), mw: MiddlewareCtx<()>| async move {
-        mw.output("cached")
-    });
+    let cache_mw =
+        middleware_fn(|_ctx: (), mw: MiddlewareCtx<()>| async move { mw.output("cached") });
 
-    let proc = os::<()>().use_middleware(cache_mw).handler(
-        |_ctx: (), _input: ()| async move { Ok::<_, ORPCError>("should not reach".to_string()) },
-    );
+    let proc = os::<()>()
+        .use_middleware(cache_mw)
+        .handler(|_ctx: (), _input: ()| async move {
+            Ok::<_, ORPCError>("should not reach".to_string())
+        });
 
     let erased = proc.into_erased();
     let input = DynInput::from_value(serde_json::json!(null));
@@ -171,9 +175,7 @@ async fn middleware_short_circuit() {
 /// Double middleware: () -> u32 -> String
 #[tokio::test]
 async fn double_middleware_chain() {
-    let mw1 = middleware_fn(|_ctx: (), mw: MiddlewareCtx<u32>| async move {
-        mw.next(42u32).await
-    });
+    let mw1 = middleware_fn(|_ctx: (), mw: MiddlewareCtx<u32>| async move { mw.next(42u32).await });
 
     let mw2 = middleware_fn(|ctx: u32, mw: MiddlewareCtx<String>| async move {
         mw.next(format!("val-{ctx}")).await
@@ -194,8 +196,8 @@ async fn double_middleware_chain() {
 /// ORPCError wire format check
 #[test]
 fn orpc_error_wire_format() {
-    let err = ORPCError::not_found("User not found")
-        .with_data(serde_json::json!({"userId": "123"}));
+    let err =
+        ORPCError::not_found("User not found").with_data(serde_json::json!({"userId": "123"}));
     let json = serde_json::to_value(&err).unwrap();
     assert_eq!(json["code"], "NOT_FOUND");
     assert_eq!(json["status"], 404);

@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use futures_util::StreamExt;
 use http::StatusCode;
 use orpc::ORPCError;
-use orpc_procedure::{DynInput, DynOutput, ErasedProcedure, HttpMethod, ProcedureError, SerializeError};
+use orpc_procedure::{
+    DynInput, DynOutput, ErasedProcedure, HttpMethod, ProcedureError, SerializeError,
+};
 
 use crate::rpc::procedure_error_to_orpc_error;
 
@@ -52,8 +54,16 @@ impl RouteIndex {
         }
         // Sort: routes with more literal segments first for deterministic matching.
         routes.sort_by(|a, b| {
-            let a_literals = a.segments.iter().filter(|s| matches!(s, PathSegment::Literal(_))).count();
-            let b_literals = b.segments.iter().filter(|s| matches!(s, PathSegment::Literal(_))).count();
+            let a_literals = a
+                .segments
+                .iter()
+                .filter(|s| matches!(s, PathSegment::Literal(_)))
+                .count();
+            let b_literals = b
+                .segments
+                .iter()
+                .filter(|s| matches!(s, PathSegment::Literal(_)))
+                .count();
             b_literals.cmp(&a_literals)
         });
         RouteIndex { routes }
@@ -94,10 +104,7 @@ pub fn compile_path_pattern(pattern: &str) -> Vec<PathSegment> {
 }
 
 /// Match a URL path against compiled segments, extracting path parameters.
-pub fn match_path(
-    segments: &[PathSegment],
-    path: &str,
-) -> Option<HashMap<String, String>> {
+pub fn match_path(segments: &[PathSegment], path: &str) -> Option<HashMap<String, String>> {
     let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
 
     if path_parts.len() != segments.len() {
@@ -153,7 +160,9 @@ pub fn decode_openapi_request(
     }
 
     // Query params
-    if let Some(qs) = query && !qs.is_empty() {
+    if let Some(qs) = query
+        && !qs.is_empty()
+    {
         let params: HashMap<String, String> = serde_urlencoded::from_str(qs)
             .map_err(|e| ORPCError::bad_request(format!("Invalid query string: {e}")))?;
         for (k, v) in params {
@@ -162,7 +171,10 @@ pub fn decode_openapi_request(
     }
 
     // Body (only for methods with body)
-    let has_body = matches!(method, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch);
+    let has_body = matches!(
+        method,
+        HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
+    );
     if has_body && !body.is_empty() {
         let body_value: serde_json::Value = serde_json::from_slice(body)
             .map_err(|e| ORPCError::bad_request(format!("Invalid request body: {e}")))?;
@@ -195,8 +207,7 @@ pub fn encode_openapi_success(output: DynOutput) -> Result<(StatusCode, Vec<u8>)
 
 /// Encode an OpenAPI error response as plain JSON ORPCError.
 pub fn encode_openapi_error(err: &ORPCError) -> (StatusCode, Vec<u8>) {
-    let status = StatusCode::from_u16(err.status)
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let status = StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let body = serde_json::to_vec(err).unwrap_or_default();
     (status, body)
 }
@@ -241,21 +252,27 @@ mod tests {
     #[test]
     fn compile_path_with_params() {
         let segs = compile_path_pattern("/users/{id}");
-        assert_eq!(segs, vec![
-            PathSegment::Literal("users".into()),
-            PathSegment::Param("id".into()),
-        ]);
+        assert_eq!(
+            segs,
+            vec![
+                PathSegment::Literal("users".into()),
+                PathSegment::Param("id".into()),
+            ]
+        );
     }
 
     #[test]
     fn compile_nested_path() {
         let segs = compile_path_pattern("/users/{id}/posts/{post_id}");
-        assert_eq!(segs, vec![
-            PathSegment::Literal("users".into()),
-            PathSegment::Param("id".into()),
-            PathSegment::Literal("posts".into()),
-            PathSegment::Param("post_id".into()),
-        ]);
+        assert_eq!(
+            segs,
+            vec![
+                PathSegment::Literal("users".into()),
+                PathSegment::Param("id".into()),
+                PathSegment::Literal("posts".into()),
+                PathSegment::Param("post_id".into()),
+            ]
+        );
     }
 
     #[test]
@@ -296,32 +313,49 @@ mod tests {
 
     #[test]
     fn http_method_conversion() {
-        assert_eq!(http_method_to_orpc(&http::Method::GET), Some(HttpMethod::Get));
-        assert_eq!(http_method_to_orpc(&http::Method::POST), Some(HttpMethod::Post));
-        assert_eq!(http_method_to_orpc(&http::Method::DELETE), Some(HttpMethod::Delete));
+        assert_eq!(
+            http_method_to_orpc(&http::Method::GET),
+            Some(HttpMethod::Get)
+        );
+        assert_eq!(
+            http_method_to_orpc(&http::Method::POST),
+            Some(HttpMethod::Post)
+        );
+        assert_eq!(
+            http_method_to_orpc(&http::Method::DELETE),
+            Some(HttpMethod::Delete)
+        );
         assert!(http_method_to_orpc(&http::Method::CONNECT).is_none());
     }
 
     #[test]
     fn route_index_build_and_match() {
         let get_user = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) }),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) })
+            },
             Route::get("/users/{id}"),
             Meta::default(),
         );
         let list_users = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) }),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) })
+            },
             Route::get("/users"),
             Meta::default(),
         );
         let create_user = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) }),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::from_future(async { Ok(DynOutput::new("ok")) })
+            },
             Route::post("/users"),
             Meta::default(),
         );
         // Procedure without route metadata (should not be indexed)
         let ping = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::from_future(async { Ok(DynOutput::new("pong")) }),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::from_future(async { Ok(DynOutput::new("pong")) })
+            },
             Route::default(),
             Meta::default(),
         );
@@ -351,7 +385,8 @@ mod tests {
     #[test]
     fn decode_get_with_query() {
         let params = HashMap::from([("id".into(), "42".into())]);
-        let input = decode_openapi_request(&params, Some("limit=10"), b"", HttpMethod::Get).unwrap();
+        let input =
+            decode_openapi_request(&params, Some("limit=10"), b"", HttpMethod::Get).unwrap();
         let val = input.as_value().unwrap();
         assert_eq!(val["id"], "42");
         assert_eq!(val["limit"], "10");

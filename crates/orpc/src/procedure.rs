@@ -43,8 +43,9 @@ where
     /// Convert to type-erased procedure, preserving all metadata.
     pub fn into_erased(self) -> ErasedProcedure<TBaseCtx> {
         let exec = self.exec;
-        let mut erased = ErasedProcedure::new(move |ctx, input| exec(ctx, input), self.route, self.meta)
-            .with_error_map(self.error_map);
+        let mut erased =
+            ErasedProcedure::new(move |ctx, input| exec(ctx, input), self.route, self.meta)
+                .with_error_map(self.error_map);
         if let Some(schema) = self.input_schema {
             erased.input_schema = Some(schema);
         }
@@ -63,9 +64,9 @@ mod tests {
     fn procedure_type_params_are_phantom() {
         // Verify Procedure can be created with arbitrary type params
         let _proc: Procedure<(), String, Vec<u8>, std::io::Error> = Procedure {
-            exec: Arc::new(|_ctx, _input| ProcedureStream::error(
-                orpc_procedure::ProcedureError::Unwind(Box::new("test")),
-            )),
+            exec: Arc::new(|_ctx, _input| {
+                ProcedureStream::error(orpc_procedure::ProcedureError::Unwind(Box::new("test")))
+            }),
             input_schema: None,
             output_schema: None,
             error_map: ErrorMap::default(),
@@ -78,9 +79,9 @@ mod tests {
     #[test]
     fn into_erased_preserves_route() {
         let proc: Procedure<(), (), (), std::io::Error> = Procedure {
-            exec: Arc::new(|_ctx, _input| ProcedureStream::error(
-                orpc_procedure::ProcedureError::Unwind(Box::new("test")),
-            )),
+            exec: Arc::new(|_ctx, _input| {
+                ProcedureStream::error(orpc_procedure::ProcedureError::Unwind(Box::new("test")))
+            }),
             input_schema: None,
             output_schema: None,
             error_map: ErrorMap::default(),

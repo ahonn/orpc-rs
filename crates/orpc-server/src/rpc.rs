@@ -4,7 +4,9 @@ use futures_core::Stream;
 use futures_util::StreamExt;
 use http::StatusCode;
 use orpc::ORPCError;
-use orpc_procedure::{DynInput, DynOutput, ErasedProcedure, ProcedureError, ProcedureStream, SerializeError};
+use orpc_procedure::{
+    DynInput, DynOutput, ErasedProcedure, ProcedureError, ProcedureStream, SerializeError,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::sse;
@@ -104,15 +106,11 @@ pub fn procedure_error_to_orpc_error(err: ProcedureError) -> ORPCError {
                 Err(_) => ORPCError::internal_server_error("Internal server error"),
             }
         }
-        ProcedureError::Deserialize(e) => {
-            ORPCError::bad_request(format!("Bad request: {e}"))
-        }
+        ProcedureError::Deserialize(e) => ORPCError::bad_request(format!("Bad request: {e}")),
         ProcedureError::Serialize(_) => {
             ORPCError::internal_server_error("Response serialization failed")
         }
-        ProcedureError::Unwind(_) => {
-            ORPCError::internal_server_error("Internal server error")
-        }
+        ProcedureError::Unwind(_) => ORPCError::internal_server_error("Internal server error"),
     }
 }
 
@@ -120,8 +118,7 @@ pub fn procedure_error_to_orpc_error(err: ProcedureError) -> ORPCError {
 ///
 /// Produces `(HTTP status, {"json": <orpc_error>, "meta": []})`.
 pub fn encode_rpc_error(err: &ORPCError) -> (StatusCode, Vec<u8>) {
-    let status = StatusCode::from_u16(err.status)
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let status = StatusCode::from_u16(err.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let envelope = RpcEnvelope {
         json: serde_json::to_value(err).unwrap_or_default(),
         meta: vec![],
@@ -162,10 +159,7 @@ pub async fn execute_rpc<TCtx>(
 /// Response from [`execute_rpc_auto`]: either a single JSON body or an SSE stream.
 pub enum RpcResponse {
     /// Single-value response (query/mutation).
-    Json {
-        status: StatusCode,
-        body: Vec<u8>,
-    },
+    Json { status: StatusCode, body: Vec<u8> },
     /// Streaming response (subscription).
     Sse {
         body_stream: Pin<Box<dyn Stream<Item = Result<String, std::io::Error>> + Send>>,
@@ -222,7 +216,7 @@ async fn consume_single_value(mut stream: ProcedureStream) -> (StatusCode, Vec<u
 mod tests {
     use super::*;
     use orpc::ErrorCode;
-    use orpc_procedure::{DeserializeError, ProcedureStream, Route, Meta};
+    use orpc_procedure::{DeserializeError, Meta, ProcedureStream, Route};
 
     #[test]
     fn path_to_key_basic() {
@@ -261,10 +255,7 @@ mod tests {
 
     #[test]
     fn path_to_key_no_prefix() {
-        assert_eq!(
-            path_to_procedure_key("/ping", ""),
-            Some("ping".into())
-        );
+        assert_eq!(path_to_procedure_key("/ping", ""), Some("ping".into()));
     }
 
     #[test]
@@ -347,9 +338,7 @@ mod tests {
 
     #[test]
     fn error_mapping_resolver_unknown() {
-        let proc_err = ProcedureError::Resolver(Box::new(
-            std::io::Error::new(std::io::ErrorKind::Other, "unknown"),
-        ));
+        let proc_err = ProcedureError::Resolver(Box::new(std::io::Error::other("unknown")));
         let result = procedure_error_to_orpc_error(proc_err);
         assert_eq!(result.code, ErrorCode::InternalServerError);
     }

@@ -53,7 +53,9 @@ impl State {
 
     /// Get a reference to a stored value by type.
     pub fn get<T: Send + Sync + 'static>(&self) -> Option<&T> {
-        self.0.get(&TypeId::of::<T>()).and_then(|v| v.downcast_ref())
+        self.0
+            .get(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref())
     }
 
     /// Get a mutable reference to a stored value by type.

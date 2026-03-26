@@ -53,11 +53,14 @@ pub fn parse_meta(meta: &[serde_json::Value]) -> Result<Vec<MetaEntry>, ORPCErro
         return Ok(vec![]);
     }
 
-    meta.iter().map(|entry| {
-        let arr = entry.as_array()
-            .ok_or_else(|| ORPCError::bad_request("Invalid meta entry: expected array"))?;
-        parse_single_entry(arr)
-    }).collect()
+    meta.iter()
+        .map(|entry| {
+            let arr = entry
+                .as_array()
+                .ok_or_else(|| ORPCError::bad_request("Invalid meta entry: expected array"))?;
+            parse_single_entry(arr)
+        })
+        .collect()
 }
 
 fn parse_single_entry(entry: &[serde_json::Value]) -> Result<MetaEntry, ORPCError> {
@@ -65,20 +68,26 @@ fn parse_single_entry(entry: &[serde_json::Value]) -> Result<MetaEntry, ORPCErro
         return Err(ORPCError::bad_request("Empty meta entry"));
     }
 
-    let type_id = entry[0].as_u64()
+    let type_id = entry[0]
+        .as_u64()
         .ok_or_else(|| ORPCError::bad_request("Meta type must be a number"))?;
     let meta_type = MetaType::from_u64(type_id)
         .ok_or_else(|| ORPCError::bad_request(format!("Unknown meta type: {type_id}")))?;
 
-    let path = entry[1..].iter().map(|seg| {
-        if let Some(s) = seg.as_str() {
-            Ok(PathSegment::Key(s.to_string()))
-        } else if let Some(n) = seg.as_u64() {
-            Ok(PathSegment::Index(n as usize))
-        } else {
-            Err(ORPCError::bad_request("Meta path segment must be string or number"))
-        }
-    }).collect::<Result<Vec<_>, _>>()?;
+    let path = entry[1..]
+        .iter()
+        .map(|seg| {
+            if let Some(s) = seg.as_str() {
+                Ok(PathSegment::Key(s.to_string()))
+            } else if let Some(n) = seg.as_u64() {
+                Ok(PathSegment::Index(n as usize))
+            } else {
+                Err(ORPCError::bad_request(
+                    "Meta path segment must be string or number",
+                ))
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(MetaEntry { meta_type, path })
 }
@@ -89,10 +98,7 @@ fn parse_single_entry(entry: &[serde_json::Value]) -> Result<MetaEntry, ORPCErro
 /// - **Undefined (3)**: remove the key from parent object (→ `Option::None` during deserialization)
 /// - **Map (7)**: convert `[[k,v],...]` array → `{k:v,...}` object
 /// - All others: no-op (BigInt/Date/URL/RegExp as strings, Set as array, NaN as null)
-pub fn apply_meta(
-    value: &mut serde_json::Value,
-    entries: &[MetaEntry],
-) -> Result<(), ORPCError> {
+pub fn apply_meta(value: &mut serde_json::Value, entries: &[MetaEntry]) -> Result<(), ORPCError> {
     for entry in entries {
         match entry.meta_type {
             MetaType::Undefined => {
@@ -109,10 +115,7 @@ pub fn apply_meta(
 }
 
 /// Navigate to the parent of a path and remove the target key.
-fn remove_at_path(
-    root: &mut serde_json::Value,
-    path: &[PathSegment],
-) -> Result<(), ORPCError> {
+fn remove_at_path(root: &mut serde_json::Value, path: &[PathSegment]) -> Result<(), ORPCError> {
     if path.is_empty() {
         // Root is undefined — replace with null
         *root = serde_json::Value::Null;
@@ -129,7 +132,9 @@ fn remove_at_path(
             }
         }
         PathSegment::Index(idx) => {
-            if let Some(arr) = parent.as_array_mut() && *idx < arr.len() {
+            if let Some(arr) = parent.as_array_mut()
+                && *idx < arr.len()
+            {
                 arr[*idx] = serde_json::Value::Null;
             }
         }
@@ -147,7 +152,9 @@ fn transform_map_at_path(
     if let Some(arr) = target.as_array() {
         let mut map = serde_json::Map::new();
         for pair in arr {
-            if let Some(kv) = pair.as_array() && kv.len() == 2 {
+            if let Some(kv) = pair.as_array()
+                && kv.len() == 2
+            {
                 let key = match &kv[0] {
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
@@ -171,9 +178,9 @@ fn navigate_mut<'a>(
             PathSegment::Key(key) => current
                 .get_mut(key.as_str())
                 .ok_or_else(|| ORPCError::bad_request(format!("Meta path not found: {key}")))?,
-            PathSegment::Index(idx) => current
-                .get_mut(*idx)
-                .ok_or_else(|| ORPCError::bad_request(format!("Meta index out of bounds: {idx}")))?,
+            PathSegment::Index(idx) => current.get_mut(*idx).ok_or_else(|| {
+                ORPCError::bad_request(format!("Meta index out of bounds: {idx}"))
+            })?,
         };
     }
     Ok(current)
@@ -206,18 +213,18 @@ mod tests {
         let entries = parse_meta(&meta).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].meta_type, MetaType::BigInt);
-        assert_eq!(entries[0].path, vec![
-            PathSegment::Key("data".into()),
-            PathSegment::Key("count".into()),
-        ]);
+        assert_eq!(
+            entries[0].path,
+            vec![
+                PathSegment::Key("data".into()),
+                PathSegment::Key("count".into()),
+            ]
+        );
     }
 
     #[test]
     fn parse_multiple_entries() {
-        let meta = vec![
-            json!([0, "count"]),
-            json!([1, "updated"]),
-        ];
+        let meta = vec![json!([0, "count"]), json!([1, "updated"])];
         let entries = parse_meta(&meta).unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].meta_type, MetaType::BigInt);
@@ -228,11 +235,14 @@ mod tests {
     fn parse_with_array_index() {
         let meta = vec![json!([1, "items", 0, "date"])];
         let entries = parse_meta(&meta).unwrap();
-        assert_eq!(entries[0].path, vec![
-            PathSegment::Key("items".into()),
-            PathSegment::Index(0),
-            PathSegment::Key("date".into()),
-        ]);
+        assert_eq!(
+            entries[0].path,
+            vec![
+                PathSegment::Key("items".into()),
+                PathSegment::Index(0),
+                PathSegment::Key("date".into()),
+            ]
+        );
     }
 
     #[test]
@@ -279,8 +289,14 @@ mod tests {
         let mut value = json!({"count": "12345678901234567890", "date": "2024-01-01T00:00:00Z"});
         let original = value.clone();
         let entries = vec![
-            MetaEntry { meta_type: MetaType::BigInt, path: vec![PathSegment::Key("count".into())] },
-            MetaEntry { meta_type: MetaType::Date, path: vec![PathSegment::Key("date".into())] },
+            MetaEntry {
+                meta_type: MetaType::BigInt,
+                path: vec![PathSegment::Key("count".into())],
+            },
+            MetaEntry {
+                meta_type: MetaType::Date,
+                path: vec![PathSegment::Key("date".into())],
+            },
         ];
         apply_meta(&mut value, &entries).unwrap();
         assert_eq!(value, original);
@@ -302,7 +318,10 @@ mod tests {
         let mut value = json!({"response": {"mapping": [["x", 10], ["y", 20]]}});
         let entries = vec![MetaEntry {
             meta_type: MetaType::Map,
-            path: vec![PathSegment::Key("response".into()), PathSegment::Key("mapping".into())],
+            path: vec![
+                PathSegment::Key("response".into()),
+                PathSegment::Key("mapping".into()),
+            ],
         }];
         apply_meta(&mut value, &entries).unwrap();
         assert_eq!(value["response"]["mapping"]["x"], 10);

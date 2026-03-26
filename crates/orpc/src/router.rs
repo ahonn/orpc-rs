@@ -18,7 +18,11 @@ impl<TCtx> Router<TCtx> {
 
     /// Add a procedure. Accepts `Procedure` (auto-erased) or `ErasedProcedure`.
     /// Panics if the key already exists.
-    pub fn procedure(mut self, key: impl Into<String>, proc: impl Into<ErasedProcedure<TCtx>>) -> Self {
+    pub fn procedure(
+        mut self,
+        key: impl Into<String>,
+        proc: impl Into<ErasedProcedure<TCtx>>,
+    ) -> Self {
         let key = key.into();
         if self.procedures.contains_key(&key) {
             panic!("duplicate procedure key: \"{key}\"");
@@ -137,7 +141,9 @@ mod tests {
 
     fn dummy_procedure() -> ErasedProcedure<()> {
         ErasedProcedure::new(
-            |_ctx, _input| ProcedureStream::from_future(async { Ok(orpc_procedure::DynOutput::new("ok")) }),
+            |_ctx, _input| {
+                ProcedureStream::from_future(async { Ok(orpc_procedure::DynOutput::new("ok")) })
+            },
             Route::default(),
             Meta::default(),
         )

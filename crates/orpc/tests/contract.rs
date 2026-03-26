@@ -180,9 +180,6 @@ fn erased_contract_preserves_type_ids() {
         .build();
 
     let erased: ErasedContract = contract.into();
-    assert_eq!(
-        erased.input_type_id,
-        std::any::TypeId::of::<GetUserInput>()
-    );
+    assert_eq!(erased.input_type_id, std::any::TypeId::of::<GetUserInput>());
     assert_eq!(erased.output_type_id, std::any::TypeId::of::<User>());
 }

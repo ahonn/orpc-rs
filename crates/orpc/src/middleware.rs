@@ -25,10 +25,13 @@ use crate::handler::BoxFuture;
 /// ```
 pub fn middleware_fn<TCtx, TNextCtx, F, Fut>(
     f: F,
-) -> impl Fn(TCtx, MiddlewareCtx<TNextCtx>) -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
-       + Send
-       + Sync
-       + 'static
+) -> impl Fn(
+    TCtx,
+    MiddlewareCtx<TNextCtx>,
+) -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
++ Send
++ Sync
++ 'static
 where
     F: Fn(TCtx, MiddlewareCtx<TNextCtx>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<MiddlewareOutput, ProcedureError>> + Send + 'static,
@@ -103,10 +106,7 @@ pub(crate) struct ComposedChain<TBaseCtx, TMidCtx, TCurrentCtx, M> {
 }
 
 impl<TBaseCtx, TMidCtx, TCurrentCtx, M> ComposedChain<TBaseCtx, TMidCtx, TCurrentCtx, M> {
-    pub fn new(
-        prev: Arc<dyn MiddlewareChain<TBaseCtx, TMidCtx>>,
-        middleware: Arc<M>,
-    ) -> Self {
+    pub fn new(prev: Arc<dyn MiddlewareChain<TBaseCtx, TMidCtx>>, middleware: Arc<M>) -> Self {
         ComposedChain {
             prev,
             middleware,
@@ -121,7 +121,10 @@ where
     TBaseCtx: Send + 'static,
     TMidCtx: Send + 'static,
     TCurrentCtx: Send + 'static,
-    M: Fn(TMidCtx, MiddlewareCtx<TCurrentCtx>) -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
+    M: Fn(
+            TMidCtx,
+            MiddlewareCtx<TCurrentCtx>,
+        ) -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
         + Send
         + Sync
         + 'static,
@@ -214,7 +217,10 @@ impl<TNextCtx> MiddlewareCtx<TNextCtx> {
     /// After this call, `input()` will return `Some`. No-op if already materialized.
     pub fn materialize_input(&mut self) -> Result<(), ProcedureError> {
         // Take ownership temporarily, materialize, put back
-        let input = std::mem::replace(&mut self.dyn_input, DynInput::from_value(serde_json::Value::Null));
+        let input = std::mem::replace(
+            &mut self.dyn_input,
+            DynInput::from_value(serde_json::Value::Null),
+        );
         self.dyn_input = input.materialize()?;
         Ok(())
     }
@@ -277,7 +283,9 @@ mod tests {
 
         // middleware: u32 → String (context switch)
         let middleware = Arc::new(
-            |ctx: u32, mw: MiddlewareCtx<String>| -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
+            |ctx: u32,
+             mw: MiddlewareCtx<String>|
+             -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
                 Box::pin(async move { mw.next(format!("user-{ctx}")).await })
             },
         );
@@ -311,7 +319,9 @@ mod tests {
         let prev: Arc<dyn MiddlewareChain<(), ()>> = Arc::new(IdentityChain);
 
         let middleware = Arc::new(
-            |_ctx: (), mw: MiddlewareCtx<()>| -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
+            |_ctx: (),
+             mw: MiddlewareCtx<()>|
+             -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
                 Box::pin(async move { mw.output("cached response") })
             },
         );
@@ -344,7 +354,9 @@ mod tests {
 
         // First middleware: u32 → String
         let mw1 = Arc::new(
-            |ctx: u32, mw: MiddlewareCtx<String>| -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
+            |ctx: u32,
+             mw: MiddlewareCtx<String>|
+             -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
                 Box::pin(async move { mw.next(format!("user-{ctx}")).await })
             },
         );
@@ -353,7 +365,9 @@ mod tests {
 
         // Second middleware: String → (String, bool)
         let mw2 = Arc::new(
-            |ctx: String, mw: MiddlewareCtx<(String, bool)>| -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
+            |ctx: String,
+             mw: MiddlewareCtx<(String, bool)>|
+             -> BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>> {
                 Box::pin(async move { mw.next((ctx, true)).await })
             },
         );
@@ -368,10 +382,7 @@ mod tests {
                 Box::new(|ctx: (String, bool), input: DynInput| {
                     Box::pin(async move {
                         let val: String = input.deserialize()?;
-                        Ok(DynOutput::new(format!(
-                            "{}:{}:{}",
-                            ctx.0, ctx.1, val
-                        )))
+                        Ok(DynOutput::new(format!("{}:{}:{}", ctx.0, ctx.1, val)))
                     })
                 }),
             )

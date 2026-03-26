@@ -246,9 +246,7 @@ mod tests {
 
     #[test]
     fn contract_builder_input_only() {
-        let contract = oc()
-            .input(Identity::<GetUserInput>::new())
-            .build();
+        let contract = oc().input(Identity::<GetUserInput>::new()).build();
 
         assert!(contract.input_schema.is_some());
         assert!(contract.output_schema.is_none());

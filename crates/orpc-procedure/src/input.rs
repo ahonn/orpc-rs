@@ -94,7 +94,10 @@ mod tests {
         let input = DynInput::from_value(serde_json::json!({"wrong": "fields"}));
         let result = input.deserialize::<TestInput>();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ProcedureError::Deserialize(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ProcedureError::Deserialize(_)
+        ));
     }
 
     #[test]
