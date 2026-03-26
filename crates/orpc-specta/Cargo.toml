@@ -1,5 +1,6 @@
 [package]
 name = "orpc-specta"
+description = "TypeScript type generation for orpc-rs via specta"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "orpc-server"
+description = "Wire protocol implementation for orpc-rs (RPC, SSE, OpenAPI)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

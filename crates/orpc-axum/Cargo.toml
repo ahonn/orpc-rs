@@ -1,5 +1,6 @@
 [package]
 name = "orpc-axum"
+description = "Axum integration for orpc-rs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
