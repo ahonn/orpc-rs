@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use orpc_procedure::ErasedSchema;
-use specta::datatype::DataType;
 use specta::TypeCollection;
+use specta::datatype::DataType;
 use specta_serde::SerdeMode;
-use specta_typescript::{primitives, Typescript};
+use specta_typescript::{Typescript, primitives};
 
 use crate::schema::SpectaSchema;
 
@@ -35,19 +35,14 @@ pub enum ExportError {
 /// ```ignore
 /// orpc_specta::export_ts(&router, "./bindings.ts")?;
 /// ```
-pub fn export_ts<TCtx: Send>(
-    router: &orpc::Router<TCtx>,
-    path: &str,
-) -> Result<(), ExportError> {
+pub fn export_ts<TCtx: Send>(router: &orpc::Router<TCtx>, path: &str) -> Result<(), ExportError> {
     let content = generate_ts(router)?;
     std::fs::write(path, content)?;
     Ok(())
 }
 
 /// Generate TypeScript type definitions as a string.
-pub fn generate_ts<TCtx: Send>(
-    router: &orpc::Router<TCtx>,
-) -> Result<String, ExportError> {
+pub fn generate_ts<TCtx: Send>(router: &orpc::Router<TCtx>) -> Result<String, ExportError> {
     let mut all_types = TypeCollection::default();
     let mut procedures: BTreeMap<String, ProcedureTypeInfo> = BTreeMap::new();
 
@@ -55,10 +50,13 @@ pub fn generate_ts<TCtx: Send>(
         let input_dt = extract_and_collect(proc.input_schema.as_deref(), &mut all_types);
         let output_dt = extract_and_collect(proc.output_schema.as_deref(), &mut all_types);
 
-        procedures.insert(key.clone(), ProcedureTypeInfo {
-            input: input_dt,
-            output: output_dt,
-        });
+        procedures.insert(
+            key.clone(),
+            ProcedureTypeInfo {
+                input: input_dt,
+                output: output_dt,
+            },
+        );
     }
 
     // Apply serde transformations (handles #[serde(rename)], etc.)
@@ -74,7 +72,8 @@ pub fn generate_ts<TCtx: Send>(
     output.push_str("import type { Client } from \"@orpc/client\"\n\n");
 
     // Render named type exports
-    let type_defs = exporter.export(&all_types)
+    let type_defs = exporter
+        .export(&all_types)
         .map_err(|e| ExportError::Ts(e.to_string()))?;
     if !type_defs.is_empty() {
         output.push_str(&type_defs);
@@ -134,8 +133,7 @@ fn render_datatype(
         return primitives::reference(exporter, types, r)
             .map_err(|e| ExportError::Ts(e.to_string()));
     }
-    primitives::inline(exporter, types, dt)
-        .map_err(|e| ExportError::Ts(e.to_string()))
+    primitives::inline(exporter, types, dt).map_err(|e| ExportError::Ts(e.to_string()))
 }
 
 fn insert_into_tree(
@@ -158,7 +156,13 @@ fn insert_into_tree(
             Some(dt) => render_datatype(exporter, types, dt)?,
             None => "void".to_string(),
         };
-        tree.insert(path[0].to_string(), TreeNode::Leaf { input_ts, output_ts });
+        tree.insert(
+            path[0].to_string(),
+            TreeNode::Leaf {
+                input_ts,
+                output_ts,
+            },
+        );
         return Ok(());
     }
 
@@ -173,17 +177,17 @@ fn insert_into_tree(
     Ok(())
 }
 
-fn format_tree(
-    tree: &BTreeMap<String, TreeNode>,
-    indent: usize,
-) -> Result<String, ExportError> {
+fn format_tree(tree: &BTreeMap<String, TreeNode>, indent: usize) -> Result<String, ExportError> {
     let pad = "  ".repeat(indent);
     let inner_pad = "  ".repeat(indent + 1);
     let mut out = String::from("{\n");
 
     for (name, node) in tree {
         match node {
-            TreeNode::Leaf { input_ts, output_ts } => {
+            TreeNode::Leaf {
+                input_ts,
+                output_ts,
+            } => {
                 out.push_str(&format!(
                     "{inner_pad}{name}: Client<Record<never, never>, {input_ts}, {output_ts}, Error>\n"
                 ));
@@ -252,8 +256,14 @@ mod tests {
         assert!(ts.contains("Planet"));
         assert!(ts.contains("FindPlanetInput"));
         // Check that named types are rendered as references, not inlined
-        assert!(ts.contains("FindPlanetInput"), "should contain named type FindPlanetInput:\n{ts}");
-        assert!(ts.contains("Planet"), "should contain named type Planet:\n{ts}");
+        assert!(
+            ts.contains("FindPlanetInput"),
+            "should contain named type FindPlanetInput:\n{ts}"
+        );
+        assert!(
+            ts.contains("Planet"),
+            "should contain named type Planet:\n{ts}"
+        );
         // The procedure should reference the named types, not inline them
         assert!(
             ts.contains("Client<Record<never, never>, FindPlanetInput, Planet, Error>"),

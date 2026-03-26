@@ -4,8 +4,8 @@ use std::sync::Arc;
 use orpc_procedure::{
     DynInput, DynOutput, ErasedSchema, ErrorMap, Meta, ProcedureError, ProcedureStream, Route,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::context::Context;
 use crate::error::ORPCError;
@@ -14,7 +14,7 @@ use crate::middleware::{
     ComposedChain, IdentityChain, MiddlewareChain, MiddlewareCtx, MiddlewareOutput, ProcedureMeta,
 };
 use crate::procedure::Procedure;
-use crate::schema::{make_input_validator, InputValidator, Schema};
+use crate::schema::{InputValidator, Schema, make_input_validator};
 
 /// Create a new procedure builder with the given context type.
 ///
@@ -78,7 +78,10 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
     }
 
     /// Set the output schema without input schema.
-    pub fn output<S: Schema>(self, schema: S) -> BuilderWithOutput<TBaseCtx, TCtx, S::Output, TError>
+    pub fn output<S: Schema>(
+        self,
+        schema: S,
+    ) -> BuilderWithOutput<TBaseCtx, TCtx, S::Output, TError>
     where
         S::Output: Serialize + 'static,
     {
@@ -99,7 +102,11 @@ impl<TBaseCtx: Context, TCtx: Context, TError> Builder<TBaseCtx, TCtx, TError> {
     {
         let is_passthrough = schema.is_passthrough();
         let erased = schema.into_erased();
-        let validator = if is_passthrough { None } else { make_input_validator() };
+        let validator = if is_passthrough {
+            None
+        } else {
+            make_input_validator()
+        };
         BuilderWithInput {
             middleware_chain: self.middleware_chain,
             error_map: self.error_map,
@@ -352,7 +359,10 @@ mod tests {
         let input = DynInput::from_value(serde_json::json!({"name": "World"}));
         let mut stream = erased.exec((), input);
         let result = stream.next().await.unwrap().unwrap();
-        assert_eq!(result.to_value().unwrap(), serde_json::json!("Hello, World!"));
+        assert_eq!(
+            result.to_value().unwrap(),
+            serde_json::json!("Hello, World!")
+        );
     }
 
     #[tokio::test]
@@ -420,16 +430,17 @@ mod tests {
         let input = DynInput::from_value(serde_json::json!({"name": "Test"}));
         let mut stream = erased.exec((), input);
         let result = stream.next().await.unwrap().unwrap();
-        assert_eq!(result.to_value().unwrap(), serde_json::json!("Hello, Test!"));
+        assert_eq!(
+            result.to_value().unwrap(),
+            serde_json::json!("Hello, Test!")
+        );
     }
 
     #[tokio::test]
     async fn multiple_calls_to_same_procedure() {
-        let proc = os::<u32>()
-            .input(Identity::<String>::new())
-            .handler(|ctx: u32, input: String| async move {
-                Ok::<_, ORPCError>(format!("{ctx}:{input}"))
-            });
+        let proc = os::<u32>().input(Identity::<String>::new()).handler(
+            |ctx: u32, input: String| async move { Ok::<_, ORPCError>(format!("{ctx}:{input}")) },
+        );
 
         let erased = proc.into_erased();
 

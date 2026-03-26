@@ -18,7 +18,9 @@ struct RpcRequest {
 }
 
 type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send>>;
-type HandlerFn = dyn Fn(serde_json::Value, Channel<serde_json::Value>) -> BoxFuture<serde_json::Value> + Send + Sync;
+type HandlerFn = dyn Fn(serde_json::Value, Channel<serde_json::Value>) -> BoxFuture<serde_json::Value>
+    + Send
+    + Sync;
 
 /// Type-erased handler stored as Tauri managed state.
 struct RpcHandler {
@@ -133,7 +135,11 @@ where
     let procedure = match router.get(&req.path) {
         Some(p) => p,
         None => {
-            return make_error_response(404, "NOT_FOUND", &format!("Procedure not found: {}", req.path));
+            return make_error_response(
+                404,
+                "NOT_FOUND",
+                &format!("Procedure not found: {}", req.path),
+            );
         }
     };
 
@@ -163,24 +169,22 @@ where
     // Single-value: consume first item
     let mut stream = stream;
     match stream.next().await {
-        Some(Ok(output)) => {
-            match rpc::encode_rpc_success(output) {
-                Ok((status, body)) => serde_json::json!({
+        Some(Ok(output)) => match rpc::encode_rpc_success(output) {
+            Ok((status, body)) => serde_json::json!({
+                "type": "response",
+                "status": status.as_u16(),
+                "body": serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default()
+            }),
+            Err(err) => {
+                let orpc_err = rpc::procedure_error_to_orpc_error(err);
+                let (status, body) = rpc::encode_rpc_error(&orpc_err);
+                serde_json::json!({
                     "type": "response",
                     "status": status.as_u16(),
                     "body": serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default()
-                }),
-                Err(err) => {
-                    let orpc_err = rpc::procedure_error_to_orpc_error(err);
-                    let (status, body) = rpc::encode_rpc_error(&orpc_err);
-                    serde_json::json!({
-                        "type": "response",
-                        "status": status.as_u16(),
-                        "body": serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default()
-                    })
-                }
+                })
             }
-        }
+        },
         Some(Err(err)) => {
             let orpc_err = rpc::procedure_error_to_orpc_error(err);
             let (status, body) = rpc::encode_rpc_error(&orpc_err);

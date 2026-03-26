@@ -3,12 +3,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::{
-    Router as AxumRouter,
-    body::Body,
-    extract::Request,
-    response::Response,
-};
+use axum::{Router as AxumRouter, body::Body, extract::Request, response::Response};
 use futures_core::Stream;
 use futures_util::StreamExt;
 use http::StatusCode;
@@ -117,9 +112,7 @@ where
     let procedure = match shared.router.get(&procedure_key) {
         Some(p) => p,
         None => {
-            let err = orpc::ORPCError::not_found(format!(
-                "Procedure not found: {procedure_key}"
-            ));
+            let err = orpc::ORPCError::not_found(format!("Procedure not found: {procedure_key}"));
             let (status, body) = rpc::encode_rpc_error(&err);
             return json_response(status, body);
         }
@@ -139,19 +132,15 @@ where
             None => orpc_procedure::DynInput::from_value(serde_json::Value::Null),
         }
     } else {
-        let body_bytes = match axum::body::to_bytes(
-            Body::new(body),
-            shared.config.max_body_size,
-        )
-        .await
-        {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                let err = orpc::ORPCError::bad_request(format!("Failed to read body: {e}"));
-                let (status, body) = rpc::encode_rpc_error(&err);
-                return json_response(status, body);
-            }
-        };
+        let body_bytes =
+            match axum::body::to_bytes(Body::new(body), shared.config.max_body_size).await {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    let err = orpc::ORPCError::bad_request(format!("Failed to read body: {e}"));
+                    let (status, body) = rpc::encode_rpc_error(&err);
+                    return json_response(status, body);
+                }
+            };
 
         match rpc::decode_rpc_request(&body_bytes) {
             Ok(input) => input,
@@ -196,10 +185,7 @@ fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(
-                &input[i + 1..i + 3],
-                16,
-            ) {
+            if let Ok(byte) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
                 output.push(byte);
                 i += 3;
                 continue;
@@ -391,9 +377,7 @@ where
     };
 
     let path = parts.uri.path();
-    let stripped_path = path
-        .strip_prefix(&shared.config.prefix)
-        .unwrap_or(path);
+    let stripped_path = path.strip_prefix(&shared.config.prefix).unwrap_or(path);
 
     let route_match = match shared.route_index.match_route(method, stripped_path) {
         Some(m) => m,
@@ -406,11 +390,7 @@ where
 
     let procedure = shared.router.get(route_match.procedure_key).unwrap();
 
-    let body_bytes = match axum::body::to_bytes(
-        Body::new(body),
-        shared.config.max_body_size,
-    )
-    .await
+    let body_bytes = match axum::body::to_bytes(Body::new(body), shared.config.max_body_size).await
     {
         Ok(bytes) => bytes,
         Err(e) => {

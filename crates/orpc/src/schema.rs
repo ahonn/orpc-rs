@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use orpc_procedure::{DynInput, ErasedSchema, ProcedureError};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::error::ORPCError;
 

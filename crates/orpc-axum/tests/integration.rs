@@ -142,10 +142,7 @@ async fn handler_returns_orpc_error() {
     assert_eq!(status, 404);
     assert_eq!(json["json"]["code"], "NOT_FOUND");
     assert_eq!(json["json"]["status"], 404);
-    assert!(json["json"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("Vulcan"));
+    assert!(json["json"]["message"].as_str().unwrap().contains("Vulcan"));
 }
 
 #[tokio::test]
@@ -283,8 +280,7 @@ async fn custom_prefix() {
         ..Default::default()
     };
 
-    let app =
-        orpc_axum::into_router_with_config(build_test_router(), ctx_from_parts, config);
+    let app = orpc_axum::into_router_with_config(build_test_router(), ctx_from_parts, config);
 
     let req = rpc_request("/api/rpc/ping", serde_json::json!({}));
     let resp = app.oneshot(req).await.unwrap();
@@ -371,7 +367,9 @@ async fn sse_subscription_error_mid_stream() {
         |_ctx: AppCtx, _input: DynInput| {
             let items: Vec<Result<DynOutput, ProcedureError>> = vec![
                 Ok(DynOutput::new("ok")),
-                Err(ProcedureError::from(ORPCError::internal_server_error("boom"))),
+                Err(ProcedureError::from(ORPCError::internal_server_error(
+                    "boom",
+                ))),
             ];
             ProcedureStream::from_stream(futures_util::stream::iter(items))
         },
@@ -426,9 +424,13 @@ fn build_openapi_router() -> Router<AppCtx> {
         |_ctx: AppCtx, input: DynInput| {
             ProcedureStream::from_future(async move {
                 #[derive(serde::Deserialize)]
-                struct Input { id: String }
+                struct Input {
+                    id: String,
+                }
                 let inp: Input = input.deserialize()?;
-                Ok(DynOutput::new(serde_json::json!({"id": inp.id, "name": "Alice"})))
+                Ok(DynOutput::new(
+                    serde_json::json!({"id": inp.id, "name": "Alice"}),
+                ))
             })
         },
         Route::get("/users/{id}"),
@@ -439,9 +441,13 @@ fn build_openapi_router() -> Router<AppCtx> {
         |_ctx: AppCtx, input: DynInput| {
             ProcedureStream::from_future(async move {
                 #[derive(serde::Deserialize)]
-                struct Input { name: String }
+                struct Input {
+                    name: String,
+                }
                 let inp: Input = input.deserialize()?;
-                Ok(DynOutput::new(serde_json::json!({"id": "new", "name": inp.name})))
+                Ok(DynOutput::new(
+                    serde_json::json!({"id": "new", "name": inp.name}),
+                ))
             })
         },
         Route::post("/users"),
@@ -452,10 +458,14 @@ fn build_openapi_router() -> Router<AppCtx> {
         |_ctx: AppCtx, input: DynInput| {
             ProcedureStream::from_future(async move {
                 #[derive(serde::Deserialize)]
-                struct Input { limit: Option<String> }
+                struct Input {
+                    limit: Option<String>,
+                }
                 let inp: Input = input.deserialize()?;
                 let limit = inp.limit.unwrap_or("10".into());
-                Ok(DynOutput::new(serde_json::json!({"users": [], "limit": limit})))
+                Ok(DynOutput::new(
+                    serde_json::json!({"users": [], "limit": limit}),
+                ))
             })
         },
         Route::get("/users"),

@@ -2,10 +2,10 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use orpc_procedure::{ErasedSchema, ProcedureError};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-use crate::builder::{build_procedure, Builder};
+use crate::builder::{Builder, build_procedure};
 use crate::context::Context;
 use crate::contract::ContractProcedure;
 use crate::handler::{BoxFuture, Handler};
@@ -237,10 +237,7 @@ mod tests {
             }) as BoxFuture<'static, Result<MiddlewareOutput, ProcedureError>>
         };
 
-        async fn handler(
-            ctx: AuthCtx,
-            input: GetUserInput,
-        ) -> Result<User, crate::ORPCError> {
+        async fn handler(ctx: AuthCtx, input: GetUserInput) -> Result<User, crate::ORPCError> {
             Ok(User {
                 id: input.id,
                 name: ctx.user_name,

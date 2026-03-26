@@ -16,7 +16,8 @@ impl DynOutput {
 
     /// Serialize to a JSON value.
     pub fn to_value(&self) -> Result<serde_json::Value, ProcedureError> {
-        serde_json::to_value(&self.0).map_err(|e| ProcedureError::Serialize(SerializeError::from(e)))
+        serde_json::to_value(&self.0)
+            .map_err(|e| ProcedureError::Serialize(SerializeError::from(e)))
     }
 
     /// Serialize directly to a writer (for streaming responses).
@@ -63,10 +64,7 @@ mod tests {
             radius: 6371,
         });
         let value = output.to_value().unwrap();
-        assert_eq!(
-            value,
-            serde_json::json!({"name": "Earth", "radius": 6371})
-        );
+        assert_eq!(value, serde_json::json!({"name": "Earth", "radius": 6371}));
     }
 
     #[test]

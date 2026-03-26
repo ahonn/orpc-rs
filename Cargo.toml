@@ -17,9 +17,9 @@ thiserror = "2"
 pin-project-lite = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 futures-util = "0.3"
-orpc-procedure = { path = "crates/orpc-procedure" }
-orpc = { path = "crates/orpc" }
-orpc-server = { path = "crates/orpc-server" }
+orpc-procedure = { path = "crates/orpc-procedure", version = "0.1.0" }
+orpc = { path = "crates/orpc", version = "0.1.0" }
+orpc-server = { path = "crates/orpc-server", version = "0.1.0" }
 http = "1"
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }

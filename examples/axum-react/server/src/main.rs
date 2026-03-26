@@ -22,16 +22,59 @@ struct PlanetDb {
 impl PlanetDb {
     fn new() -> Self {
         let planets = vec![
-            Planet { id: 1, name: "Mercury".into(), radius_km: 2440, has_rings: false },
-            Planet { id: 2, name: "Venus".into(), radius_km: 6052, has_rings: false },
-            Planet { id: 3, name: "Earth".into(), radius_km: 6371, has_rings: false },
-            Planet { id: 4, name: "Mars".into(), radius_km: 3390, has_rings: false },
-            Planet { id: 5, name: "Jupiter".into(), radius_km: 69911, has_rings: true },
-            Planet { id: 6, name: "Saturn".into(), radius_km: 58232, has_rings: true },
-            Planet { id: 7, name: "Uranus".into(), radius_km: 25362, has_rings: true },
-            Planet { id: 8, name: "Neptune".into(), radius_km: 24622, has_rings: true },
+            Planet {
+                id: 1,
+                name: "Mercury".into(),
+                radius_km: 2440,
+                has_rings: false,
+            },
+            Planet {
+                id: 2,
+                name: "Venus".into(),
+                radius_km: 6052,
+                has_rings: false,
+            },
+            Planet {
+                id: 3,
+                name: "Earth".into(),
+                radius_km: 6371,
+                has_rings: false,
+            },
+            Planet {
+                id: 4,
+                name: "Mars".into(),
+                radius_km: 3390,
+                has_rings: false,
+            },
+            Planet {
+                id: 5,
+                name: "Jupiter".into(),
+                radius_km: 69911,
+                has_rings: true,
+            },
+            Planet {
+                id: 6,
+                name: "Saturn".into(),
+                radius_km: 58232,
+                has_rings: true,
+            },
+            Planet {
+                id: 7,
+                name: "Uranus".into(),
+                radius_km: 25362,
+                has_rings: true,
+            },
+            Planet {
+                id: 8,
+                name: "Neptune".into(),
+                radius_km: 24622,
+                has_rings: true,
+            },
         ];
-        PlanetDb { next_id: 9, planets }
+        PlanetDb {
+            next_id: 9,
+            planets,
+        }
     }
 }
 
@@ -139,11 +182,14 @@ fn build_openapi_router() -> Router<AppCtx> {
             ProcedureStream::from_future(async move {
                 let inp: FindPlanetInput = input.deserialize()?;
                 let db = ctx.db.lock().unwrap();
-                let planet = db.planets
+                let planet = db
+                    .planets
                     .iter()
                     .find(|p| p.name.eq_ignore_ascii_case(&inp.name))
                     .cloned()
-                    .ok_or_else(|| ORPCError::not_found(format!("Planet '{}' not found", inp.name)));
+                    .ok_or_else(|| {
+                        ORPCError::not_found(format!("Planet '{}' not found", inp.name))
+                    });
                 Ok(DynOutput::new(planet?))
             })
         },
@@ -213,13 +259,10 @@ async fn main() {
     let db_clone = db.clone();
     let tx_clone = planet_tx.clone();
 
-    let rpc = orpc_axum::into_router(
-        rpc_router,
-        move |_parts: &http::request::Parts| AppCtx {
-            db: db.clone(),
-            planet_tx: planet_tx.clone(),
-        },
-    );
+    let rpc = orpc_axum::into_router(rpc_router, move |_parts: &http::request::Parts| AppCtx {
+        db: db.clone(),
+        planet_tx: planet_tx.clone(),
+    });
 
     let openapi = orpc_axum::into_openapi_router(
         openapi_router,

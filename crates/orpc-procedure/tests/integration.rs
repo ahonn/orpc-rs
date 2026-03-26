@@ -35,7 +35,9 @@ async fn end_to_end_procedure_execution() {
                 }
             })
         },
-        Route::get("/planets/{name}").tag("planets").summary("Find planet"),
+        Route::get("/planets/{name}")
+            .tag("planets")
+            .summary("Find planet"),
         Meta::default(),
     );
 
@@ -86,10 +88,7 @@ async fn materialize_then_deserialize() {
     let input = input.materialize().unwrap();
 
     // Inspect
-    assert_eq!(
-        input.as_value(),
-        Some(&serde_json::json!({"name": "Mars"}))
-    );
+    assert_eq!(input.as_value(), Some(&serde_json::json!({"name": "Mars"})));
 
     // Deserialize
     let find: FindPlanetInput = input.deserialize().unwrap();

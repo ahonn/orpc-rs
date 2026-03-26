@@ -247,8 +247,8 @@ mod tests {
 
     #[test]
     fn orpc_error_serialization() {
-        let err = ORPCError::not_found("User not found")
-            .with_data(serde_json::json!({"userId": "123"}));
+        let err =
+            ORPCError::not_found("User not found").with_data(serde_json::json!({"userId": "123"}));
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "NOT_FOUND");
         assert_eq!(json["status"], 404);

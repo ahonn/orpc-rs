@@ -115,9 +115,9 @@ mod tests {
         let proc = ErasedProcedure::new(
             |_ctx: (), input: DynInput| {
                 let test_input: TestInput = input.deserialize().unwrap();
-                ProcedureStream::from_future(async move {
-                    Ok(DynOutput::new(test_input.value * 2))
-                })
+                ProcedureStream::from_future(
+                    async move { Ok(DynOutput::new(test_input.value * 2)) },
+                )
             },
             Route::get("/test"),
             Meta::default(),
@@ -166,7 +166,9 @@ mod tests {
     #[test]
     fn route_and_meta_accessible() {
         let proc = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::error(ProcedureError::Unwind(Box::new("unused"))),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::error(ProcedureError::Unwind(Box::new("unused")))
+            },
             Route::get("/users").tag("users").summary("List users"),
             Meta::default(),
         );
@@ -182,7 +184,9 @@ mod tests {
         use crate::schema::NoSchema;
 
         let proc = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::error(ProcedureError::Unwind(Box::new("unused"))),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::error(ProcedureError::Unwind(Box::new("unused")))
+            },
             Route::default(),
             Meta::default(),
         )
@@ -196,7 +200,9 @@ mod tests {
     #[test]
     fn debug_output() {
         let proc = ErasedProcedure::new(
-            |_ctx: (), _input: DynInput| ProcedureStream::error(ProcedureError::Unwind(Box::new("unused"))),
+            |_ctx: (), _input: DynInput| {
+                ProcedureStream::error(ProcedureError::Unwind(Box::new("unused")))
+            },
             Route::get("/test"),
             Meta::default(),
         );

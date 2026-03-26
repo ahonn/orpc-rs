@@ -159,10 +159,7 @@ mod tests {
         let stream = ProcedureStream::error(ProcedureError::Unwind(Box::new("panic!")));
         let results: Vec<_> = stream.collect().await;
         assert_eq!(results.len(), 1);
-        assert!(matches!(
-            &results[0],
-            Err(ProcedureError::Unwind(_))
-        ));
+        assert!(matches!(&results[0], Err(ProcedureError::Unwind(_))));
     }
 
     #[test]
