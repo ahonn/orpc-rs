@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "examples/axum-react/server", "examples/tauri-app/src-tauri"]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ahonn/orpc-rs"
@@ -17,9 +17,9 @@ thiserror = "2"
 pin-project-lite = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 futures-util = "0.3"
-orpc-procedure = { path = "crates/orpc-procedure", version = "0.1.2" }
-orpc = { path = "crates/orpc", version = "0.1.2" }
-orpc-server = { path = "crates/orpc-server", version = "0.1.2" }
+orpc-procedure = { path = "crates/orpc-procedure", version = "0.1.3" }
+orpc = { path = "crates/orpc", version = "0.1.3" }
+orpc-server = { path = "crates/orpc-server", version = "0.1.3" }
 http = "1"
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }

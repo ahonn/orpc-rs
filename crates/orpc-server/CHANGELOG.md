@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-27
+
+### Other
+
+- Release v0.1.2 ([099d643](https://github.com/ahonn/orpc-rs/commit/099d643faa5b5e8c6c529623006dfa8716b64e2a))
+
+
 ## [0.1.2] - 2026-03-26
 
 ### Other
