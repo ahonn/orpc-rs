@@ -2631,7 +2631,6 @@ dependencies = [
  "base64 0.22.1",
  "futures-core",
  "futures-util",
- "orpc-client",
  "orpc-macros",
  "orpc-procedure",
  "serde",
