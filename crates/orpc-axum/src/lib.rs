@@ -19,6 +19,10 @@ pub struct ORPCConfig {
     pub prefix: String,
     /// Maximum request body size in bytes. Default: 10 MB.
     pub max_body_size: usize,
+    /// Maximum size per uploaded file in bytes. Default: 10 MB.
+    pub max_file_size: usize,
+    /// Maximum number of uploaded files per request. Default: 10.
+    pub max_files: usize,
 }
 
 impl Default for ORPCConfig {
@@ -26,6 +30,8 @@ impl Default for ORPCConfig {
         ORPCConfig {
             prefix: String::new(),
             max_body_size: 10 * 1024 * 1024,
+            max_file_size: 10 * 1024 * 1024,
+            max_files: 10,
         }
     }
 }
@@ -118,7 +124,15 @@ where
         }
     };
 
-    // GET: input from ?data= query param; POST: input from body
+    let content_type = parts
+        .headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    // GET: input from ?data= query param
+    // POST multipart: parse multipart form data
+    // POST JSON: input from body
     let input = if parts.method == http::Method::GET {
         let data_param = parts.uri.query().and_then(extract_data_param);
         match data_param {
@@ -130,6 +144,27 @@ where
                 }
             },
             None => orpc_procedure::DynInput::from_value(serde_json::Value::Null),
+        }
+    } else if content_type.starts_with("multipart/form-data") {
+        match parse_multipart_body(
+            content_type,
+            body,
+            shared.config.max_file_size,
+            shared.config.max_files,
+        )
+        .await
+        {
+            Ok((data_json, files)) => match rpc::decode_rpc_multipart_request(&data_json, files) {
+                Ok(input) => input,
+                Err(err) => {
+                    let (status, body) = rpc::encode_rpc_error(&err);
+                    return json_response(status, body);
+                }
+            },
+            Err(err) => {
+                let (status, body) = rpc::encode_rpc_error(&err);
+                return json_response(status, body);
+            }
         }
     } else {
         let body_bytes =
@@ -201,6 +236,76 @@ fn percent_decode(input: &str) -> String {
     String::from_utf8(output).unwrap_or_default()
 }
 
+/// Parse a multipart/form-data request body into the "data" JSON field and file parts.
+///
+/// Expected format from `@orpc/client`:
+/// - Field `"data"`: JSON string with the RPC envelope (`json`, `meta`, `maps`)
+/// - Fields `"0"`, `"1"`, ...: file blobs in order
+async fn parse_multipart_body(
+    content_type: &str,
+    body: Body,
+    max_file_size: usize,
+    max_files: usize,
+) -> Result<(Vec<u8>, Vec<rpc::MultipartFile>), orpc::ORPCError> {
+    let boundary = multer::parse_boundary(content_type)
+        .map_err(|_| orpc::ORPCError::bad_request("Invalid multipart boundary"))?;
+
+    let constraints = multer::Constraints::new().size_limit(
+        multer::SizeLimit::new()
+            .for_field("data", 10 * 1024 * 1024) // 10MB for data field
+            .per_field(max_file_size as u64),
+    );
+
+    let body_stream = body.into_data_stream();
+    let mut multipart = multer::Multipart::with_constraints(body_stream, boundary, constraints);
+
+    let mut data_json: Option<Vec<u8>> = None;
+    let mut files: Vec<(usize, rpc::MultipartFile)> = Vec::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| orpc::ORPCError::bad_request(format!("Multipart parse error: {e}")))?
+    {
+        let field_name = field.name().unwrap_or("").to_string();
+        let file_name = field.file_name().map(|s| s.to_string());
+        let field_content_type = field.content_type().map(|m| m.to_string());
+
+        let bytes = field.bytes().await.map_err(|e| {
+            orpc::ORPCError::bad_request(format!("Failed to read field \"{field_name}\": {e}"))
+        })?;
+
+        if field_name == "data" {
+            data_json = Some(bytes.to_vec());
+        } else if let Ok(index) = field_name.parse::<usize>() {
+            if files.len() >= max_files {
+                return Err(orpc::ORPCError::bad_request(format!(
+                    "Too many files: max {max_files}"
+                )));
+            }
+            files.push((
+                index,
+                rpc::MultipartFile {
+                    data: bytes.to_vec(),
+                    name: file_name,
+                    content_type: field_content_type,
+                },
+            ));
+        }
+        // Ignore unknown fields
+    }
+
+    let data_json = data_json.ok_or_else(|| {
+        orpc::ORPCError::bad_request("Missing \"data\" field in multipart request")
+    })?;
+
+    // Sort files by index to match maps order
+    files.sort_by_key(|(idx, _)| *idx);
+    let files = files.into_iter().map(|(_, f)| f).collect();
+
+    Ok((data_json, files))
+}
+
 fn json_response(status: StatusCode, body: Vec<u8>) -> Response {
     Response::builder()
         .status(status)
@@ -210,6 +315,11 @@ fn json_response(status: StatusCode, body: Vec<u8>) -> Response {
 }
 
 /// Default SSE keep-alive interval (5 seconds), matching oRPC TypeScript server.
+///
+/// This also determines the maximum latency for detecting client disconnection:
+/// when the client closes the connection, the server detects it on the next
+/// write attempt. Keep-alive comments ensure writes happen at this interval
+/// even when the inner subscription stream is idle.
 const SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
 fn sse_response(
@@ -294,6 +404,10 @@ pub struct OpenAPIConfig {
     pub prefix: String,
     /// Maximum request body size in bytes. Default: 10 MB.
     pub max_body_size: usize,
+    /// Maximum size per uploaded file in bytes. Default: 10 MB.
+    pub max_file_size: usize,
+    /// Maximum number of uploaded files per request. Default: 10.
+    pub max_files: usize,
 }
 
 impl Default for OpenAPIConfig {
@@ -301,6 +415,8 @@ impl Default for OpenAPIConfig {
         OpenAPIConfig {
             prefix: String::new(),
             max_body_size: 10 * 1024 * 1024,
+            max_file_size: 10 * 1024 * 1024,
+            max_files: 10,
         }
     }
 }
@@ -390,26 +506,55 @@ where
 
     let procedure = shared.router.get(route_match.procedure_key).unwrap();
 
-    let body_bytes = match axum::body::to_bytes(Body::new(body), shared.config.max_body_size).await
-    {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            let err = orpc::ORPCError::bad_request(format!("Failed to read body: {e}"));
-            let (status, body) = openapi::encode_openapi_error(&err);
-            return json_response(status, body);
-        }
-    };
+    let content_type = parts
+        .headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
 
-    let input = match openapi::decode_openapi_request(
-        &route_match.path_params,
-        parts.uri.query(),
-        &body_bytes,
-        method,
-    ) {
-        Ok(input) => input,
-        Err(err) => {
-            let (status, body) = openapi::encode_openapi_error(&err);
-            return json_response(status, body);
+    let input = if content_type.starts_with("multipart/form-data") {
+        match parse_multipart_body(
+            content_type,
+            body,
+            shared.config.max_file_size,
+            shared.config.max_files,
+        )
+        .await
+        {
+            Ok((data_json, files)) => match rpc::decode_rpc_multipart_request(&data_json, files) {
+                Ok(input) => input,
+                Err(err) => {
+                    let (status, body) = openapi::encode_openapi_error(&err);
+                    return json_response(status, body);
+                }
+            },
+            Err(err) => {
+                let (status, body) = openapi::encode_openapi_error(&err);
+                return json_response(status, body);
+            }
+        }
+    } else {
+        let body_bytes =
+            match axum::body::to_bytes(Body::new(body), shared.config.max_body_size).await {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    let err = orpc::ORPCError::bad_request(format!("Failed to read body: {e}"));
+                    let (status, body) = openapi::encode_openapi_error(&err);
+                    return json_response(status, body);
+                }
+            };
+
+        match openapi::decode_openapi_request(
+            &route_match.path_params,
+            parts.uri.query(),
+            &body_bytes,
+            method,
+        ) {
+            Ok(input) => input,
+            Err(err) => {
+                let (status, body) = openapi::encode_openapi_error(&err);
+                return json_response(status, body);
+            }
         }
     };
 

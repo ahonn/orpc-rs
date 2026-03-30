@@ -87,17 +87,26 @@ async fn handle_rpc(
 }
 
 /// Stream ProcedureStream items through a Tauri Channel.
+///
+/// Stops streaming when the channel is closed (frontend disconnected)
+/// to avoid leaking background tasks and resources.
 async fn stream_to_channel(mut stream: ProcedureStream, channel: Channel<serde_json::Value>) {
     let mut id: u64 = 0;
     while let Some(item) = stream.next().await {
         match item {
             Ok(output) => {
                 let value = output.to_value().unwrap_or_default();
-                let _ = channel.send(serde_json::json!({
-                    "event": "message",
-                    "id": id,
-                    "data": { "json": value }
-                }));
+                if channel
+                    .send(serde_json::json!({
+                        "event": "message",
+                        "id": id,
+                        "data": { "json": value }
+                    }))
+                    .is_err()
+                {
+                    // Channel closed — frontend disconnected, stop streaming.
+                    return;
+                }
                 id += 1;
             }
             Err(err) => {

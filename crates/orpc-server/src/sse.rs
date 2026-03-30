@@ -72,6 +72,15 @@ pub fn stream_to_sse(stream: ProcedureStream, start_id: u64) -> SseStream {
 ///
 /// Emits an initial comment (`: \n\n`) to flush response headers, matching
 /// the behavior of the oRPC TypeScript server.
+///
+/// # Client disconnect lifecycle
+///
+/// When a client disconnects, the HTTP server (e.g. hyper/axum) stops polling
+/// the response body and drops it, which drops this stream and the inner
+/// `ProcedureStream`. The `SseKeepAlive` wrapper in the transport layer emits
+/// periodic keep-alive comments, ensuring the server detects disconnection
+/// within the keep-alive interval (typically 5 seconds) even when the inner
+/// stream is idle.
 pub struct SseStream {
     inner: ProcedureStream,
     next_id: u64,
@@ -80,11 +89,14 @@ pub struct SseStream {
     needs_flush: bool,
 }
 
+// ProcedureStream wraps Pin<Box<dyn Stream + Send>>, so it is Unpin and Send.
+// SseStream's remaining fields are plain data, so SseStream is also Unpin and Send.
+
 impl Stream for SseStream {
     type Item = Result<String, std::io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = unsafe { self.get_unchecked_mut() };
+        let this = self.get_mut();
 
         if this.done {
             return Poll::Ready(None);
@@ -96,8 +108,7 @@ impl Stream for SseStream {
             return Poll::Ready(Some(Ok(": \n\n".to_string())));
         }
 
-        let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
-        match inner.poll_next(cx) {
+        match Pin::new(&mut this.inner).poll_next(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => {
                 // Stream ended naturally — emit done event
@@ -132,9 +143,6 @@ impl Stream for SseStream {
         }
     }
 }
-
-// Safety: SseStream is Send because ProcedureStream is Send and all other fields are plain data.
-unsafe impl Send for SseStream {}
 
 #[cfg(test)]
 mod tests {
