@@ -1,29 +1,81 @@
 [workspace]
-git_release_enable = true
+# Defaults: all crates publish to crates.io, but no individual tags/releases.
+# Only the main `orpc` crate creates git tags and GitHub releases.
+git_release_enable = false
+git_tag_enable = false
 changelog_update = true
+publish_timeout = "30m"
+
+# --- Core crates (version-locked via version_group) ---
+
+# Main crate: owns the git tag, GitHub release, and root CHANGELOG.
+[[package]]
+name = "orpc"
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
+git_release_enable = true
+changelog_path = "./CHANGELOG.md"
+changelog_include = [
+    "orpc-procedure",
+    "orpc-macros",
+    "orpc-client",
+    "orpc-server",
+    "orpc-axum",
+    "orpc-specta",
+    "tauri-plugin-orpc",
+]
+version_group = "orpc"
 
-# tauri-plugin-orpc follows main crate release (no separate tags)
+[[package]]
+name = "orpc-procedure"
+version_group = "orpc"
+changelog_update = false
+
+[[package]]
+name = "orpc-macros"
+version_group = "orpc"
+changelog_update = false
+
+[[package]]
+name = "orpc-client"
+version_group = "orpc"
+changelog_update = false
+
+[[package]]
+name = "orpc-server"
+version_group = "orpc"
+changelog_update = false
+
+[[package]]
+name = "orpc-axum"
+version_group = "orpc"
+changelog_update = false
+
+[[package]]
+name = "orpc-specta"
+version_group = "orpc"
+changelog_update = false
+
 [[package]]
 name = "tauri-plugin-orpc"
-git_tag_enable = false
-git_release_enable = false
+version_group = "orpc"
+changelog_update = false
 
-# Example crates are not published
+# --- Example crates (not published) ---
+
 [[package]]
 name = "example-axum-react"
 publish = false
-git_tag_enable = false
-git_release_enable = false
+release = false
 changelog_update = false
 
 [[package]]
 name = "tauri-app"
 publish = false
-git_tag_enable = false
-git_release_enable = false
+release = false
 changelog_update = false
+
+# --- Changelog format ---
 
 [changelog]
 header = """
