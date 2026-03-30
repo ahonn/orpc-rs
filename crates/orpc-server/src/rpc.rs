@@ -37,6 +37,11 @@ pub struct RpcEnvelope<T> {
 /// - `"/other/path"` with prefix `"/rpc"` → `None`
 pub fn path_to_procedure_key(path: &str, prefix: &str) -> Option<String> {
     let stripped = path.strip_prefix(prefix)?;
+    // Ensure the prefix is followed by '/' or end-of-path to prevent
+    // "/rpc" matching "/rpcfoo/bar".
+    if !stripped.is_empty() && !stripped.starts_with('/') {
+        return None;
+    }
     let stripped = stripped.strip_prefix('/').unwrap_or(stripped);
     if stripped.is_empty() {
         return None;
@@ -136,9 +141,13 @@ pub fn decode_rpc_multipart_request(
             ))
         })?;
 
-        let orpc_file = ORPCFile::new(file.data.clone())
-            .with_name(file.name.clone().unwrap_or_default())
-            .with_content_type(file.content_type.clone().unwrap_or_default());
+        let mut orpc_file = ORPCFile::new(file.data.clone());
+        if let Some(name) = &file.name {
+            orpc_file = orpc_file.with_name(name.clone());
+        }
+        if let Some(ct) = &file.content_type {
+            orpc_file = orpc_file.with_content_type(ct.clone());
+        }
 
         let file_json = serde_json::to_value(&orpc_file).map_err(|e| {
             ORPCError::internal_server_error(format!("Failed to serialize file: {e}"))
@@ -209,10 +218,10 @@ pub fn encode_rpc_error(err: &ORPCError) -> (StatusCode, Vec<u8>) {
     (status, body)
 }
 
-/// Execute a procedure and produce the RPC response.
+/// Execute a procedure and produce the RPC response (single-value mode).
 ///
-/// For Phase 2a MVP, takes only the first item from `ProcedureStream`.
-/// Full streaming (SSE) is deferred to Phase 2c.
+/// Takes only the first item from `ProcedureStream`.
+/// For streaming subscriptions, use [`execute_rpc_auto`] instead.
 pub async fn execute_rpc<TCtx>(
     procedure: &ErasedProcedure<TCtx>,
     ctx: TCtx,
@@ -338,6 +347,13 @@ mod tests {
     #[test]
     fn path_to_key_no_prefix() {
         assert_eq!(path_to_procedure_key("/ping", ""), Some("ping".into()));
+    }
+
+    #[test]
+    fn path_to_key_prefix_boundary() {
+        // "/rpcfoo/bar" must NOT match prefix "/rpc"
+        assert_eq!(path_to_procedure_key("/rpcfoo/bar", "/rpc"), None);
+        assert_eq!(path_to_procedure_key("/rpcadmin", "/rpc"), None);
     }
 
     #[test]
@@ -562,6 +578,21 @@ mod tests {
         assert!(value["avatar"]["data"].is_string());
         // "deleted" should be removed by Undefined meta
         assert!(value.get("deleted").is_none());
+    }
+
+    #[test]
+    fn multipart_decode_preserves_none_name() {
+        let data = br#"{"json":{"file":{}},"meta":[],"maps":[["file"]]}"#;
+        let files = vec![MultipartFile {
+            data: b"data".to_vec(),
+            name: None,
+            content_type: None,
+        }];
+        let input = decode_rpc_multipart_request(data, files).unwrap();
+        let value = input.as_value().unwrap();
+        let file: orpc::ORPCFile = serde_json::from_value(value["file"].clone()).unwrap();
+        assert!(file.name.is_none());
+        assert!(file.content_type.is_none());
     }
 
     #[test]

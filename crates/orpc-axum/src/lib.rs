@@ -301,6 +301,14 @@ async fn parse_multipart_body(
 
     // Sort files by index to match maps order
     files.sort_by_key(|(idx, _)| *idx);
+    // Validate indices are contiguous 0..n to prevent misalignment with maps
+    for (expected, (actual, _)) in files.iter().enumerate() {
+        if *actual != expected {
+            return Err(orpc::ORPCError::bad_request(format!(
+                "Non-contiguous file index: expected {expected}, got {actual}"
+            )));
+        }
+    }
     let files = files.into_iter().map(|(_, f)| f).collect();
 
     Ok((data_json, files))
@@ -493,7 +501,18 @@ where
     };
 
     let path = parts.uri.path();
-    let stripped_path = path.strip_prefix(&shared.config.prefix).unwrap_or(path);
+    let stripped_path = if shared.config.prefix.is_empty() {
+        path
+    } else {
+        match path.strip_prefix(&shared.config.prefix) {
+            Some(rest) if rest.is_empty() || rest.starts_with('/') => rest,
+            _ => {
+                let err = orpc::ORPCError::not_found(format!("No route matches: {method} {path}"));
+                let (status, body) = openapi::encode_openapi_error(&err);
+                return json_response(status, body);
+            }
+        }
+    };
 
     let route_match = match shared.route_index.match_route(method, stripped_path) {
         Some(m) => m,

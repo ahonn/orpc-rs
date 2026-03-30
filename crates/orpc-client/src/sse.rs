@@ -20,16 +20,15 @@ struct SseEvent {
 /// `event: message`, `id: 0`, `data: {"json": ...}`
 fn parse_event_block(block: &str) -> Option<SseEvent> {
     let mut event_type = String::new();
-    let mut data = String::new();
+    let mut data_lines: Vec<&str> = Vec::new();
 
     for line in block.lines() {
         if let Some(value) = line.strip_prefix("event: ") {
             event_type = value.to_string();
         } else if let Some(value) = line.strip_prefix("data: ") {
-            data = value.to_string();
+            data_lines.push(value);
         } else if line == "data:" {
-            // Empty data field (used by "done" events)
-            data.clear();
+            data_lines.push("");
         } else if line.starts_with(':') || line.is_empty() {
             // Comment or blank line — ignore
             continue;
@@ -40,7 +39,10 @@ fn parse_event_block(block: &str) -> Option<SseEvent> {
         return None;
     }
 
-    Some(SseEvent { event_type, data })
+    Some(SseEvent {
+        event_type,
+        data: data_lines.join("\n"),
+    })
 }
 
 /// Convert a byte stream (from reqwest) into a stream of deserialized JSON values.
@@ -253,5 +255,21 @@ mod tests {
         let stream = bytes_stream(vec![]);
         let values: Vec<_> = sse_to_values(stream).collect().await;
         assert!(values.is_empty());
+    }
+
+    #[test]
+    fn parse_multiline_data() {
+        let block = "event: message\nid: 0\ndata: line1\ndata: line2\n";
+        let event = super::parse_event_block(block).unwrap();
+        assert_eq!(event.event_type, "message");
+        assert_eq!(event.data, "line1\nline2");
+    }
+
+    #[test]
+    fn parse_done_empty_data() {
+        let block = "event: done\ndata:\n";
+        let event = super::parse_event_block(block).unwrap();
+        assert_eq!(event.event_type, "done");
+        assert_eq!(event.data, "");
     }
 }
