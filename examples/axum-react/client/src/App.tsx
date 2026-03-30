@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { orpc, client } from "./rpc";
-import type { Planet } from "./rpc";
+import type { Planet, UploadResult } from "./rpc";
 
 // ---------------------------------------------------------------------------
 // RPC Protocol demos (via @orpc/client RPCLink)
@@ -141,6 +141,75 @@ function CreatePlanet() {
         </button>
       </form>
       {result && <pre>Created: {JSON.stringify(result, null, 2)}</pre>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// File Upload demo (multipart/form-data via @orpc/client)
+// ---------------------------------------------------------------------------
+
+function FileUpload() {
+  const [result, setResult] = useState<UploadResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setResult(null);
+    setLoading(true);
+    try {
+      const form = e.target as HTMLFormElement;
+      const description = (
+        form.querySelector('input[name="description"]') as HTMLInputElement
+      ).value;
+      const fileInput = form.querySelector(
+        'input[type="file"]'
+      ) as HTMLInputElement;
+      const file = fileInput.files?.[0];
+      if (!file) {
+        setError("Please select a file");
+        return;
+      }
+      // @orpc/client auto-detects Blob/File fields and switches to multipart
+      const res: UploadResult = await client.file.upload({
+        description,
+        file,
+      });
+      setResult(res);
+    } catch (err: any) {
+      setError(err?.message ?? "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h3>File Upload (RPC Multipart)</h3>
+      <p style={{ color: "#666", fontSize: 14 }}>
+        Uses <code>multipart/form-data</code> — <code>@orpc/client</code>{" "}
+        detects <code>Blob</code>/<code>File</code> fields and encodes
+        automatically.
+      </p>
+      <form onSubmit={handleUpload}>
+        <div>
+          <input
+            name="description"
+            placeholder="File description"
+            required
+          />
+        </div>
+        <div style={{ marginTop: 4 }}>
+          <input type="file" required />
+        </div>
+        <button type="submit" style={{ marginTop: 8 }} disabled={loading}>
+          {loading ? "Uploading..." : "Upload"}
+        </button>
+      </form>
+      {result && <pre>{JSON.stringify(result, null, 2)}</pre>}
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   );
@@ -314,6 +383,10 @@ export default function App() {
       <PlanetList />
       <FindPlanet />
       <CreatePlanet />
+
+      <hr />
+      <h2>File Upload</h2>
+      <FileUpload />
 
       <hr />
       <h2>SSE Subscription</h2>

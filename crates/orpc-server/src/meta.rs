@@ -74,7 +74,17 @@ fn parse_single_entry(entry: &[serde_json::Value]) -> Result<MetaEntry, ORPCErro
     let meta_type = MetaType::from_u64(type_id)
         .ok_or_else(|| ORPCError::bad_request(format!("Unknown meta type: {type_id}")))?;
 
-    let path = entry[1..]
+    let path = parse_path(&entry[1..])?;
+
+    Ok(MetaEntry { meta_type, path })
+}
+
+/// Parse a JSON array of path segments into `Vec<PathSegment>`.
+///
+/// Each segment is either a string (object key) or a number (array index).
+/// Used by both meta entries and multipart file maps.
+pub fn parse_path(segments: &[serde_json::Value]) -> Result<Vec<PathSegment>, ORPCError> {
+    segments
         .iter()
         .map(|seg| {
             if let Some(s) = seg.as_str() {
@@ -83,13 +93,11 @@ fn parse_single_entry(entry: &[serde_json::Value]) -> Result<MetaEntry, ORPCErro
                 Ok(PathSegment::Index(n as usize))
             } else {
                 Err(ORPCError::bad_request(
-                    "Meta path segment must be string or number",
+                    "Path segment must be string or number",
                 ))
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(MetaEntry { meta_type, path })
+        .collect()
 }
 
 /// Apply meta entries to a JSON value, transforming serialized representations.
@@ -168,7 +176,7 @@ fn transform_map_at_path(
 }
 
 /// Navigate to a value at the given path, returning a mutable reference.
-fn navigate_mut<'a>(
+pub fn navigate_mut<'a>(
     root: &'a mut serde_json::Value,
     path: &[PathSegment],
 ) -> Result<&'a mut serde_json::Value, ORPCError> {

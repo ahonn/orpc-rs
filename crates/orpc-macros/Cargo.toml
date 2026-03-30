@@ -1,0 +1,15 @@
+[package]
+name = "orpc-macros"
+description = "Proc-macro for orpc-rs: generate typed server router and client from a trait definition"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"

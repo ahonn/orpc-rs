@@ -21,6 +21,18 @@ export interface CreatePlanetInput {
   has_rings: boolean;
 }
 
+export interface UploadInput {
+  description: string;
+  file: Blob;
+}
+
+export interface UploadResult {
+  filename: string;
+  size: number;
+  content_type: string;
+  description: string;
+}
+
 // --- oRPC client setup (RPC protocol) ---
 
 // RPCLink requires an absolute URL.

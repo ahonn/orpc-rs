@@ -553,3 +553,119 @@ async fn openapi_with_prefix() {
     assert_eq!(status, 200);
     assert_eq!(json["id"], "7");
 }
+
+// --- Multipart file upload tests ---
+
+#[derive(Debug, Deserialize, Serialize)]
+struct UploadInput {
+    title: String,
+    file: ORPCFile,
+}
+
+async fn upload_handler(_ctx: AppCtx, input: UploadInput) -> Result<String, ORPCError> {
+    Ok(format!(
+        "{}:{}:{}",
+        input.title,
+        input.file.name.unwrap_or_default(),
+        input.file.data.len()
+    ))
+}
+
+fn build_upload_router() -> Router<AppCtx> {
+    router! {
+        "upload" => os::<AppCtx>().input(Identity::<UploadInput>::new()).handler(upload_handler),
+    }
+}
+
+/// Build a raw multipart/form-data request body.
+fn build_multipart_body(
+    data_json: &str,
+    files: &[(&str, &str, &[u8])], // (name, content_type, data)
+) -> (String, Vec<u8>) {
+    let boundary = "----orpc-test-boundary";
+    let mut body = Vec::new();
+
+    // "data" field
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    body.extend_from_slice(b"Content-Disposition: form-data; name=\"data\"\r\n");
+    body.extend_from_slice(b"\r\n");
+    body.extend_from_slice(data_json.as_bytes());
+    body.extend_from_slice(b"\r\n");
+
+    // File fields
+    for (i, (name, content_type, data)) in files.iter().enumerate() {
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"{i}\"; filename=\"{name}\"\r\n")
+                .as_bytes(),
+        );
+        body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
+        body.extend_from_slice(b"\r\n");
+        body.extend_from_slice(data);
+        body.extend_from_slice(b"\r\n");
+    }
+
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    let content_type = format!("multipart/form-data; boundary={boundary}");
+    (content_type, body)
+}
+
+#[tokio::test]
+async fn multipart_file_upload_rpc() {
+    let router = build_upload_router();
+    let app = orpc_axum::into_router(router, ctx_from_parts);
+
+    let data_json = r#"{"json":{"title":"My Doc","file":{}},"meta":[],"maps":[["file"]]}"#;
+    let (content_type, body) =
+        build_multipart_body(data_json, &[("readme.txt", "text/plain", b"hello world")]);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/upload")
+        .header("content-type", content_type)
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    let (status, json) = response_json(resp).await;
+    assert_eq!(status, 200);
+    assert_eq!(json["json"], "My Doc:readme.txt:11");
+}
+
+#[tokio::test]
+async fn multipart_missing_data_field() {
+    let router = build_upload_router();
+    let app = orpc_axum::into_router(router, ctx_from_parts);
+
+    let boundary = "----test";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"0\"; filename=\"f.txt\"\r\n\r\ndata\r\n--{boundary}--\r\n"
+    );
+
+    let req = Request::builder()
+        .method("POST")
+        .uri("/upload")
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.oneshot(req).await.unwrap();
+    let (status, _) = response_json(resp).await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
+async fn json_request_still_works_with_upload_router() {
+    let router = build_upload_router();
+    let app = orpc_axum::into_router(router, ctx_from_parts);
+
+    // A regular JSON request should still work (no multipart)
+    let req = rpc_request("/upload", serde_json::json!({}));
+    let resp = app.oneshot(req).await.unwrap();
+    // Will fail deserialization since UploadInput expects title+file, but should be 400/500, not panic
+    let status = resp.status().as_u16();
+    assert!(status >= 400);
+}

@@ -2,6 +2,7 @@ pub mod builder;
 pub mod context;
 pub mod contract;
 pub mod error;
+pub mod file;
 pub mod handler;
 pub mod implement;
 pub mod middleware;
@@ -15,6 +16,7 @@ pub use contract::{
     ContractBuilder, ContractBuilderWithOutput, ContractProcedure, ErasedContract, oc,
 };
 pub use error::{ErrorCode, ORPCError};
+pub use file::ORPCFile;
 pub use handler::{BoxFuture, Handler};
 pub use implement::{ContractImplementer, ContractImplementerWithMw, implement};
 pub use middleware::{MiddlewareCtx, MiddlewareOutput, ProcedureMeta, middleware_fn};
@@ -27,3 +29,6 @@ pub use orpc_procedure::{
     DynInput, DynOutput, ErasedProcedure, ErasedSchema, ErrorMap, HttpMethod, Meta, ProcedureError,
     ProcedureStream, Route, State,
 };
+
+// Re-export proc-macro
+pub use orpc_macros::orpc_service;

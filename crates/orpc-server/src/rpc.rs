@@ -3,7 +3,7 @@ use std::pin::Pin;
 use futures_core::Stream;
 use futures_util::StreamExt;
 use http::StatusCode;
-use orpc::ORPCError;
+use orpc::{ORPCError, ORPCFile};
 use orpc_procedure::{
     DynInput, DynOutput, ErasedProcedure, ProcedureError, ProcedureStream, SerializeError,
 };
@@ -67,6 +67,88 @@ pub fn decode_rpc_request(body: &[u8]) -> Result<DynInput, ORPCError> {
 
     let mut value = wire.json.unwrap_or(serde_json::Value::Null);
 
+    if !wire.meta.is_empty() {
+        let entries = crate::meta::parse_meta(&wire.meta)?;
+        crate::meta::apply_meta(&mut value, &entries)?;
+    }
+
+    Ok(DynInput::from_value(value))
+}
+
+/// Pre-parsed file data from a multipart form upload.
+#[derive(Debug)]
+pub struct MultipartFile {
+    /// Raw file bytes.
+    pub data: Vec<u8>,
+    /// Original filename from the `Content-Disposition` header.
+    pub name: Option<String>,
+    /// MIME type from the part's `Content-Type` header.
+    pub content_type: Option<String>,
+}
+
+/// Decode a multipart RPC request into a `DynInput`.
+///
+/// The transport layer (e.g. `orpc-axum`) parses the multipart body into:
+/// - `data_json`: the `"data"` text field containing the wire envelope
+/// - `files`: numbered file parts (`"0"`, `"1"`, ...) in order
+///
+/// Wire envelope format (inside `data_json`):
+/// ```json
+/// {
+///   "json": {"title": "Photo", "avatar": {}},
+///   "meta": [],
+///   "maps": [["avatar"]]
+/// }
+/// ```
+///
+/// Each `maps[i]` is a JSON path pointing to where file `i` should be
+/// injected in the `json` tree. Files are serialized as `ORPCFile` objects.
+pub fn decode_rpc_multipart_request(
+    data_json: &[u8],
+    files: Vec<MultipartFile>,
+) -> Result<DynInput, ORPCError> {
+    #[derive(Deserialize)]
+    struct MultipartWire {
+        json: Option<serde_json::Value>,
+        #[serde(default)]
+        meta: Vec<serde_json::Value>,
+        #[serde(default)]
+        maps: Vec<serde_json::Value>,
+    }
+
+    let wire: MultipartWire = serde_json::from_slice(data_json)
+        .map_err(|e| ORPCError::bad_request(format!("Invalid multipart data field: {e}")))?;
+
+    let mut value = wire.json.unwrap_or(serde_json::Value::Null);
+
+    // Inject files at the paths specified by `maps`.
+    for (i, map_entry) in wire.maps.iter().enumerate() {
+        let path_segments = map_entry
+            .as_array()
+            .ok_or_else(|| ORPCError::bad_request("maps entry must be an array"))?;
+
+        let path = crate::meta::parse_path(path_segments)?;
+
+        let file = files.get(i).ok_or_else(|| {
+            ORPCError::bad_request(format!(
+                "maps references file {i} but only {} files provided",
+                files.len()
+            ))
+        })?;
+
+        let orpc_file = ORPCFile::new(file.data.clone())
+            .with_name(file.name.clone().unwrap_or_default())
+            .with_content_type(file.content_type.clone().unwrap_or_default());
+
+        let file_json = serde_json::to_value(&orpc_file).map_err(|e| {
+            ORPCError::internal_server_error(format!("Failed to serialize file: {e}"))
+        })?;
+
+        let target = crate::meta::navigate_mut(&mut value, &path)?;
+        *target = file_json;
+    }
+
+    // Apply meta transformations (BigInt, Date, etc.)
     if !wire.meta.is_empty() {
         let entries = crate::meta::parse_meta(&wire.meta)?;
         crate::meta::apply_meta(&mut value, &entries)?;
@@ -411,5 +493,97 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["json"]["code"], "INTERNAL_SERVER_ERROR");
+    }
+
+    // --- Multipart decode tests ---
+
+    #[test]
+    fn multipart_decode_single_file() {
+        let data = br#"{"json":{"title":"Photo","avatar":{}},"meta":[],"maps":[["avatar"]]}"#;
+        let files = vec![MultipartFile {
+            data: b"file-bytes".to_vec(),
+            name: Some("photo.png".into()),
+            content_type: Some("image/png".into()),
+        }];
+
+        let input = decode_rpc_multipart_request(data, files).unwrap();
+        let value = input.as_value().unwrap();
+        assert_eq!(value["title"], "Photo");
+        assert!(value["avatar"]["data"].is_string());
+        assert_eq!(value["avatar"]["name"], "photo.png");
+        assert_eq!(value["avatar"]["contentType"], "image/png");
+
+        // Verify base64 roundtrip
+        let file: orpc::ORPCFile = serde_json::from_value(value["avatar"].clone()).unwrap();
+        assert_eq!(file.data, b"file-bytes");
+    }
+
+    #[test]
+    fn multipart_decode_multiple_files() {
+        let data = br#"{"json":{"images":[{},{}]},"meta":[],"maps":[["images",0],["images",1]]}"#;
+        let files = vec![
+            MultipartFile {
+                data: b"img-0".to_vec(),
+                name: Some("a.png".into()),
+                content_type: Some("image/png".into()),
+            },
+            MultipartFile {
+                data: b"img-1".to_vec(),
+                name: Some("b.jpg".into()),
+                content_type: Some("image/jpeg".into()),
+            },
+        ];
+
+        let input = decode_rpc_multipart_request(data, files).unwrap();
+        let value = input.as_value().unwrap();
+
+        let file0: orpc::ORPCFile = serde_json::from_value(value["images"][0].clone()).unwrap();
+        assert_eq!(file0.data, b"img-0");
+        assert_eq!(file0.name.as_deref(), Some("a.png"));
+
+        let file1: orpc::ORPCFile = serde_json::from_value(value["images"][1].clone()).unwrap();
+        assert_eq!(file1.data, b"img-1");
+        assert_eq!(file1.name.as_deref(), Some("b.jpg"));
+    }
+
+    #[test]
+    fn multipart_decode_with_meta() {
+        // Maps + meta together: file at "avatar", undefined at "deleted"
+        let data = br#"{"json":{"name":"Earth","avatar":{},"deleted":null},"meta":[[3,"deleted"]],"maps":[["avatar"]]}"#;
+        let files = vec![MultipartFile {
+            data: b"pic".to_vec(),
+            name: None,
+            content_type: None,
+        }];
+
+        let input = decode_rpc_multipart_request(data, files).unwrap();
+        let value = input.as_value().unwrap();
+        assert_eq!(value["name"], "Earth");
+        assert!(value["avatar"]["data"].is_string());
+        // "deleted" should be removed by Undefined meta
+        assert!(value.get("deleted").is_none());
+    }
+
+    #[test]
+    fn multipart_decode_missing_file() {
+        let data = br#"{"json":{"file":{}},"meta":[],"maps":[["file"]]}"#;
+        let files = vec![]; // no files provided
+        let result = decode_rpc_multipart_request(data, files);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn multipart_decode_no_maps() {
+        let data = br#"{"json":{"name":"test"},"meta":[],"maps":[]}"#;
+        let files = vec![];
+        let input = decode_rpc_multipart_request(data, files).unwrap();
+        assert_eq!(input.as_value().unwrap()["name"], "test");
+    }
+
+    #[test]
+    fn multipart_decode_invalid_data_json() {
+        let data = b"not json";
+        let result = decode_rpc_multipart_request(data, vec![]);
+        assert!(result.is_err());
     }
 }

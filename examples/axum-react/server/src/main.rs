@@ -100,6 +100,20 @@ struct CreatePlanetInput {
     has_rings: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct UploadInput {
+    description: String,
+    file: ORPCFile,
+}
+
+#[derive(Debug, Serialize)]
+struct UploadResult {
+    filename: String,
+    size: usize,
+    content_type: String,
+    description: String,
+}
+
 // --- Handlers ---
 
 async fn ping(_ctx: AppCtx, _input: ()) -> Result<String, ORPCError> {
@@ -135,6 +149,15 @@ async fn create_planet(ctx: AppCtx, input: CreatePlanetInput) -> Result<Planet, 
     Ok(planet)
 }
 
+async fn upload_file(_ctx: AppCtx, input: UploadInput) -> Result<UploadResult, ORPCError> {
+    Ok(UploadResult {
+        filename: input.file.name.unwrap_or_else(|| "unnamed".into()),
+        size: input.file.data.len(),
+        content_type: input.file.content_type.unwrap_or_else(|| "unknown".into()),
+        description: input.description,
+    })
+}
+
 // --- RPC Router (used by @orpc/client RPCLink) ---
 
 fn build_rpc_router() -> Router<AppCtx> {
@@ -168,6 +191,11 @@ fn build_rpc_router() -> Router<AppCtx> {
             "create" => os::<AppCtx>()
                 .input(Identity::<CreatePlanetInput>::new())
                 .handler(create_planet),
+        },
+        "file" => {
+            "upload" => os::<AppCtx>()
+                .input(Identity::<UploadInput>::new())
+                .handler(upload_file),
         },
     };
     r._insert("planet.stream", planet_stream_proc);
