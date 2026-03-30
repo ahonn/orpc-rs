@@ -103,11 +103,11 @@ impl Route {
     }
 }
 
-/// Extensible procedure metadata. Empty for Phase 1a.
+/// Extensible procedure metadata, reserved for future extensions.
 #[derive(Debug, Clone, Default)]
 pub struct Meta {}
 
-/// Error map stub. Full implementation in Phase 1b with Schema trait.
+/// Error map stub, reserved for future schema-based error handling.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorMap {}
 

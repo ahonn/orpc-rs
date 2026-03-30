@@ -92,11 +92,9 @@ pub(crate) type InputValidator =
 
 /// Create a type-erased input validator for non-passthrough schemas.
 ///
-/// Currently returns `None` (validation deferred until a real non-passthrough Schema exists).
-/// Called only when `is_passthrough() == false`.
+/// All current schemas (Identity, SpectaSchemaWrapper) are passthrough, so this
+/// returns `None`. Extend this if custom non-passthrough schemas are added.
 pub(crate) fn make_input_validator() -> Option<InputValidator> {
-    // TODO: implement actual validation when a non-passthrough Schema impl exists.
-    // For now, all schemas (Identity, SpectaSchemaWrapper) are passthrough.
     None
 }
 
