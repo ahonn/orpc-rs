@@ -6,6 +6,7 @@ use orpc::ORPCError;
 use orpc_procedure::{
     DynInput, DynOutput, ErasedProcedure, HttpMethod, ProcedureError, SerializeError,
 };
+use serde_json::Value;
 
 use crate::rpc::procedure_error_to_orpc_error;
 
@@ -141,11 +142,25 @@ pub fn http_method_to_orpc(method: &http::Method) -> Option<HttpMethod> {
     }
 }
 
+/// Parse query string with bracket notation support.
+/// 
+/// Uses serde_qs to properly handle bracket notation like:
+/// - `filter[status]=active` → `{"filter": {"status": "active"}}`
+/// - `tags[]=rust&tags[]=web` → `{"tags": ["rust", "web"]}`
+fn parse_query_with_brackets(qs: &str) -> Result<Value, ORPCError> {
+    serde_qs::from_str::<Value>(qs)
+        .map_err(|e| ORPCError::bad_request(format!("Invalid query string: {e}")))
+}
+
 /// Decode an OpenAPI-style request into `DynInput`.
 ///
-/// Merges path params, query params, and request body into a single JSON object.
+/// Merges path params, query params (with bracket notation support), and request body into a single JSON object.
 /// - GET/DELETE/HEAD: input from path params + query params only
 /// - POST/PUT/PATCH: input from path params + query params + body
+/// 
+/// Supports bracket notation in query strings and form data:
+/// - `filter[status]=active` → nested object
+/// - `tags[]=value1&tags[]=value2` → arrays
 pub fn decode_openapi_request(
     path_params: &HashMap<String, String>,
     query: Option<&str>,
@@ -156,17 +171,18 @@ pub fn decode_openapi_request(
 
     // Path params
     for (k, v) in path_params {
-        merged.insert(k.clone(), serde_json::Value::String(v.clone()));
+        merged.insert(k.clone(), Value::String(v.clone()));
     }
 
-    // Query params
+    // Query params with bracket notation support
     if let Some(qs) = query
         && !qs.is_empty()
     {
-        let params: HashMap<String, String> = serde_urlencoded::from_str(qs)
-            .map_err(|e| ORPCError::bad_request(format!("Invalid query string: {e}")))?;
-        for (k, v) in params {
-            merged.insert(k, serde_json::Value::String(v));
+        let query_value = parse_query_with_brackets(qs)?;
+        if let Value::Object(query_map) = query_value {
+            for (k, v) in query_map {
+                merged.insert(k, v);
+            }
         }
     }
 
@@ -176,11 +192,11 @@ pub fn decode_openapi_request(
         HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch
     );
     if has_body && !body.is_empty() {
-        let body_value: serde_json::Value = serde_json::from_slice(body)
+        let body_value: Value = serde_json::from_slice(body)
             .map_err(|e| ORPCError::bad_request(format!("Invalid request body: {e}")))?;
-        if let Some(obj) = body_value.as_object() {
+        if let Value::Object(obj) = body_value {
             for (k, v) in obj {
-                merged.insert(k.clone(), v.clone());
+                merged.insert(k, v);
             }
         } else {
             // Non-object body: use as-is if no other params
@@ -191,9 +207,9 @@ pub fn decode_openapi_request(
     }
 
     if merged.is_empty() {
-        Ok(DynInput::from_value(serde_json::Value::Null))
+        Ok(DynInput::from_value(Value::Null))
     } else {
-        Ok(DynInput::from_value(serde_json::Value::Object(merged)))
+        Ok(DynInput::from_value(Value::Object(merged)))
     }
 }
 
@@ -390,6 +406,85 @@ mod tests {
         let val = input.as_value().unwrap();
         assert_eq!(val["id"], "42");
         assert_eq!(val["limit"], "10");
+    }
+
+    #[test]
+    fn decode_query_with_bracket_notation_nested_object() {
+        let params = HashMap::new();
+        let input = decode_openapi_request(
+            &params,
+            Some("filter[status]=active&filter[type]=invoice"),
+            b"",
+            HttpMethod::Get,
+        )
+        .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["filter"]["status"], "active");
+        assert_eq!(val["filter"]["type"], "invoice");
+    }
+
+    #[test]
+    fn decode_query_with_bracket_notation_array() {
+        let params = HashMap::new();
+        let input = decode_openapi_request(
+            &params,
+            Some("tags[]=rust&tags[]=web&tags[]=api"),
+            b"",
+            HttpMethod::Get,
+        )
+        .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["tags"][0], "rust");
+        assert_eq!(val["tags"][1], "web");
+        assert_eq!(val["tags"][2], "api");
+    }
+
+    #[test]
+    fn decode_query_with_deeply_nested_brackets() {
+        let params = HashMap::new();
+        let input = decode_openapi_request(
+            &params,
+            Some("filter[customer][province]=Hà%20Nội&filter[customer][name]=ABC"),
+            b"",
+            HttpMethod::Get,
+        )
+        .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["filter"]["customer"]["province"], "Hà Nội");
+        assert_eq!(val["filter"]["customer"]["name"], "ABC");
+    }
+
+    #[test]
+    fn decode_query_with_mixed_simple_and_bracket_notation() {
+        let params = HashMap::new();
+        let input = decode_openapi_request(
+            &params,
+            Some("page=1&limit=20&filter[status]=paid&tags[]=outbound"),
+            b"",
+            HttpMethod::Get,
+        )
+        .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["page"], "1");
+        assert_eq!(val["limit"], "20");
+        assert_eq!(val["filter"]["status"], "paid");
+        assert_eq!(val["tags"][0], "outbound");
+    }
+
+    #[test]
+    fn decode_query_with_indexed_array_brackets() {
+        let params = HashMap::new();
+        let input = decode_openapi_request(
+            &params,
+            Some("items[0]=first&items[1]=second&items[2]=third"),
+            b"",
+            HttpMethod::Get,
+        )
+        .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["items"][0], "first");
+        assert_eq!(val["items"][1], "second");
+        assert_eq!(val["items"][2], "third");
     }
 
     #[test]
