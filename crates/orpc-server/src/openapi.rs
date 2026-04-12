@@ -142,13 +142,12 @@ pub fn http_method_to_orpc(method: &http::Method) -> Option<HttpMethod> {
     }
 }
 
-/// Parse query string with bracket notation support.
-/// 
-/// Uses serde_qs to properly handle bracket notation like:
-/// - `filter[status]=active` → `{"filter": {"status": "active"}}`
-/// - `tags[]=rust&tags[]=web` → `{"tags": ["rust", "web"]}`
+const QS_MAX_DEPTH: usize = 10;
+
 fn parse_query_with_brackets(qs: &str) -> Result<Value, ORPCError> {
-    serde_qs::from_str::<Value>(qs)
+    serde_qs::Config::new()
+        .max_depth(QS_MAX_DEPTH)
+        .deserialize_str(qs)
         .map_err(|e| ORPCError::bad_request(format!("Invalid query string: {e}")))
 }
 
@@ -157,7 +156,7 @@ fn parse_query_with_brackets(qs: &str) -> Result<Value, ORPCError> {
 /// Merges path params, query params (with bracket notation support), and request body into a single JSON object.
 /// - GET/DELETE/HEAD: input from path params + query params only
 /// - POST/PUT/PATCH: input from path params + query params + body
-/// 
+///
 /// Supports bracket notation in query strings and form data:
 /// - `filter[status]=active` → nested object
 /// - `tags[]=value1&tags[]=value2` → arrays
@@ -485,6 +484,36 @@ mod tests {
         assert_eq!(val["items"][0], "first");
         assert_eq!(val["items"][1], "second");
         assert_eq!(val["items"][2], "third");
+    }
+
+    #[test]
+    fn decode_query_with_repeated_params() {
+        let params = HashMap::new();
+        let input =
+            decode_openapi_request(&params, Some("color=red&color=blue"), b"", HttpMethod::Get)
+                .unwrap();
+        let val = input.as_value().unwrap();
+        assert_eq!(val["color"][0], "red");
+        assert_eq!(val["color"][1], "blue");
+    }
+
+    #[test]
+    fn decode_query_rejects_sparse_large_index_array() {
+        let params = HashMap::new();
+        let result = decode_openapi_request(&params, Some("a[99999]=x"), b"", HttpMethod::Get);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn decode_query_rejects_mixed_bracket_and_value() {
+        let params = HashMap::new();
+        let result = decode_openapi_request(
+            &params,
+            Some("filter=all&filter[status]=paid"),
+            b"",
+            HttpMethod::Get,
+        );
+        assert!(result.is_err());
     }
 
     #[test]

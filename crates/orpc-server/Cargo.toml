@@ -14,7 +14,6 @@ serde_json = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
-serde_urlencoded = { workspace = true }
 serde_qs = "1.1.1"
 
 [dev-dependencies]
