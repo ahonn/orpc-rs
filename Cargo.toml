@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "examples/axum-react/server", "examples/tauri-app/src-tauri"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/ahonn/orpc-rs"
@@ -18,9 +18,9 @@ thiserror = "2"
 pin-project-lite = "0.2"
 tokio = { version = "1", features = ["rt", "macros"] }
 futures-util = "0.3"
-orpc-procedure = { path = "crates/orpc-procedure", version = "1.0.0" }
-orpc = { path = "crates/orpc", version = "1.0.0" }
-orpc-server = { path = "crates/orpc-server", version = "1.0.0" }
+orpc-procedure = { path = "crates/orpc-procedure", version = "1.1.0" }
+orpc = { path = "crates/orpc", version = "1.1.0" }
+orpc-server = { path = "crates/orpc-server", version = "1.1.0" }
 http = "1"
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
@@ -31,6 +31,6 @@ specta-typescript = "0.0.9"
 specta-serde = "0.0.9"
 multer = "3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
-orpc-client = { path = "crates/orpc-client", version = "1.0.0" }
-orpc-macros = { path = "crates/orpc-macros", version = "1.0.0" }
+orpc-client = { path = "crates/orpc-client", version = "1.1.0" }
+orpc-macros = { path = "crates/orpc-macros", version = "1.1.0" }
 tauri = { version = "2", default-features = false }
